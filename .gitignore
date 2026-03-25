@@ -1,0 +1,5 @@
+venv
+SOKOLOV-diffusion-trajectory-generation-main
+__pycache__
+.env
+.vscode
