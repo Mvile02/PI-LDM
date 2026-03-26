@@ -1,3 +1,12 @@
+import os
+import sys
+
+# Ensure the project root is in the system path for imports
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(os.path.dirname(current_dir))
+if project_root not in sys.path:
+    sys.path.append(project_root)
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -5,7 +14,6 @@ import math
 from pi_ldm.src.model import ConditionalUNet1D
 from pi_ldm.src.physics import PhysicsLoss
 from pi_ldm.src.dataset import get_dataloaders
-import os
 
 class PILDMTrainer:
     def __init__(self, 
@@ -84,11 +92,11 @@ class PILDMTrainer:
         return loss_diff.item(), loss_physics.item(), loss_total.item()
 
 def main():
-    # Update with real absolute paths assuming script run from Code root
-    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    # Use current working directory as base
+    base_dir = os.getcwd()
     data_dir = os.path.join(base_dir, "data", "processed")
     
-    train_loader, _ = get_dataloaders(data_dir, batch_size=32, file_base="TEST")
+    train_loader, _ = get_dataloaders(data_dir, batch_size=32, file_base="X_LSZH_2026-03-01_1000_to_2026-03-01_1200_runway14")
     
     trainer = PILDMTrainer()
     
@@ -106,6 +114,13 @@ def main():
             epoch_phys += l_phys
             
         print(f"Epoch {epoch:02d} | Diff Loss: {epoch_diff/max(1, len(train_loader)):.4f} | Phys Loss: {epoch_phys/max(1, len(train_loader)):.4f}")
+
+    # Explicitly save model to subdirectory
+    models_dir = os.path.join(base_dir, "pi_ldm", "models")
+    os.makedirs(models_dir, exist_ok=True)
+    output_path = os.path.join(models_dir, "test_model.pth")
+    torch.save(trainer.model.state_dict(), output_path)
+    print(f"Model saved to {output_path}")
 
 if __name__ == "__main__":
     main()

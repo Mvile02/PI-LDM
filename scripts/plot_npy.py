@@ -83,7 +83,7 @@ def visualize_trajectories(X_filepath, meta_filepath, num_samples=3):
 if __name__ == "__main__":
     # --- CONFIGURATION AREA ---
     # The base name used in filter_data.py (without extension)
-    FILE_BASE = "meta_lszh_sample"
+    FILE_BASE = "X_LSZH_2026-03-01_1200_to_2026-03-01_1400_runway14"
     # --------------------------
 
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -92,8 +92,7 @@ if __name__ == "__main__":
     
     # Fallback for demo if the above doesn't exist yet
     if not os.path.exists(X_file):
-        X_file = os.path.join(base_dir, "data", "processed", "TEST.npy")
-        meta_file = os.path.join(base_dir, "data", "processed", "TEST.csv")
+        print("Such file does not exist")
 
     visualize_trajectories(X_file, meta_file, num_samples=3)
 

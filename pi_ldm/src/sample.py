@@ -1,14 +1,24 @@
+import math
+import os
+import sys
+
+# Ensure the project root is in the system path for imports
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(os.path.dirname(current_dir))
+if project_root not in sys.path:
+    sys.path.append(project_root)
+
 import torch
+import numpy as np
 from pi_ldm.src.model import ConditionalUNet1D
 from pi_ldm.src.physics import PhysicsLoss
-import math
 
 class PILDMSampler:
     """
     Implements Online Sampling (Inference) via Guided SDE.
     dz = [ f(z,t) - g(t)^2 \nabla_z \log p_t(z|c) + \eta \nabla_z \Phi(z) ] dt + g(t) dw
     """
-    def __init__(self, model_path=None, state_dim=6, cond_dim=3, seq_len=200, timesteps=1000, 
+    def __init__(self, model_path=None, state_dim=4, cond_dim=3, seq_len=200, timesteps=1000, 
                  device='cuda' if torch.cuda.is_available() else 'cpu'):
         self.device = device
         self.state_dim = state_dim
@@ -18,8 +28,12 @@ class PILDMSampler:
         self.model = ConditionalUNet1D(state_dim=state_dim, cond_dim=cond_dim).to(device)
         self.physics_fn = PhysicsLoss().to(device)
         
-        if model_path:
+        if model_path and os.path.exists(model_path):
             self.model.load_state_dict(torch.load(model_path, map_location=device))
+            print(f"Loaded model from {model_path}")
+        else:
+            print("No model path provided or file missing, using random weights.")
+            
         self.model.eval()
 
         # Same schedule as training
@@ -87,11 +101,32 @@ class PILDMSampler:
 
 def main():
     print("Initializing sampler...")
-    sampler = PILDMSampler()
+    # Look for model in root
+    base_dir = os.getcwd()
+    model_path = os.path.join(base_dir, "pi_ldm", "models", "test_model.pth")
+    
+    sampler = PILDMSampler(model_path=model_path)
     cond = torch.tensor([[1.0, 0.5, -0.2]], device=sampler.device) # Dummy R, A, W
-    print("Generating trajectories with physics guidance...")
-    trajectory = sampler.sample(cond, eta=0.05)
+    print("Generating trajectories without physics guidance...")
+    trajectory = sampler.sample(cond, enable_guidance=False)
     print("Generated shape:", trajectory.shape)
+
+    # Save the generated trajectory
+    output_dir = os.path.join(base_dir, "outputs", "trajectories")
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Convert to numpy and save
+    traj_np = trajectory.detach().cpu().numpy()
+    save_path = os.path.join(output_dir, "sample_trajectory.npy")
+    np.save(save_path, traj_np)
+    print(f"Trajectory saved to {save_path}")
+
+    # Save metadata for consistency with plot_map.py
+    import pandas as pd
+    meta_df = pd.DataFrame(cond.cpu().numpy(), columns=['R', 'A', 'W'])
+    meta_save_path = os.path.join(output_dir, "sample_trajectory.csv")
+    meta_df.to_csv(meta_save_path, index=False)
+    print(f"Metadata saved to {meta_save_path}")
 
 if __name__ == "__main__":
     main()
