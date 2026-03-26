@@ -101,7 +101,6 @@ def main():
     trainer = PILDMTrainer()
     
     print("Starting Training Loop...")
-    # Increase to 25 epochs to check for convergence drop clearly
     for epoch in range(25):
         epoch_diff = 0
         epoch_phys = 0

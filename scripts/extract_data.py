@@ -56,8 +56,8 @@ def extract_raw_data(airport_code, start_time, end_time, output_file):
 if __name__ == "__main__":
     # --- CONFIGURATION AREA ---
     AIRPORT = "LSZH"
-    START_TIME = "2026-03-01 12:00"
-    END_TIME = "2026-03-01 14:00"
+    START_TIME = "2026-03-01 00:00" # YYYY-MM-DD HH:MM
+    END_TIME = "2026-03-01 23:59"
     OUTPUT_FILE = None  # Set to a filename string to override default
     # --------------------------
 
