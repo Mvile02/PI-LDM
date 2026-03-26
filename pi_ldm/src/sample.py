@@ -12,6 +12,7 @@ import torch
 import numpy as np
 from pi_ldm.src.model import ConditionalUNet1D
 from pi_ldm.src.physics import PhysicsLoss
+from pi_ldm.src.dataset import AircraftTrajectoryDataset
 
 class PILDMSampler:
     """
@@ -47,7 +48,9 @@ class PILDMSampler:
         Phi(z): Calculates exactly the Distance to Feasibility.
         Uses the Physics Loss as the penalty landscape.
         """
-        trajectories = x.transpose(1, 2)
+        # x is in normalized space [-1, 1]. Denormalize for physics calculation.
+        x_phys = AircraftTrajectoryDataset.denormalize(x)
+        trajectories = x_phys.transpose(1, 2)
         # We use the total physics loss as the unnormalized potential
         phi = self.physics_fn(trajectories)
         return phi
@@ -96,8 +99,10 @@ class PILDMSampler:
             x_t = (1 / math.sqrt(alpha_t)) * (x_t - pred_noise * (1 - alpha_t) / math.sqrt(1 - alpha_hat_t)) \
                   - guidance \
                   + math.sqrt(self.beta[t_idx]) * z
-
-        return x_t
+        
+        # Denormalize output to physical space before returning
+        x_final = AircraftTrajectoryDataset.denormalize(x_t)
+        return x_final
 
 def main():
     print("Initializing sampler...")
@@ -106,24 +111,29 @@ def main():
     model_path = os.path.join(base_dir, "pi_ldm", "models", "test_model.pth")
     
     sampler = PILDMSampler(model_path=model_path)
-    cond = torch.tensor([[1.0, 0.5, -0.2]], device=sampler.device) # Dummy R, A, W
-    print("Generating trajectories without physics guidance...")
-    trajectory = sampler.sample(cond, enable_guidance=False)
-    print("Generated shape:", trajectory.shape)
+    
+    # Generate 20 trajectories for a single condition (e.g., Runway/Airport 1, Type 0, Weather 0)
+    num_samples = 40
+    cond = torch.tensor([[1.0, 0.5, 0.0]], device=sampler.device).repeat(num_samples, 1)
+    
+    print(f"Generating {num_samples} trajectories without physics guidance...")
+    trajectories = sampler.sample(cond, enable_guidance=False)
+    print("Generated shape:", trajectories.shape)
 
-    # Save the generated trajectory
+    # Save the generated trajectories
     output_dir = os.path.join(base_dir, "outputs", "trajectories")
     os.makedirs(output_dir, exist_ok=True)
     
     # Convert to numpy and save
-    traj_np = trajectory.detach().cpu().numpy()
+    traj_np = trajectories.detach().cpu().numpy()
     save_path = os.path.join(output_dir, "sample_trajectory.npy")
     np.save(save_path, traj_np)
-    print(f"Trajectory saved to {save_path}")
+    print(f"Trajectories saved to {save_path}")
 
     # Save metadata for consistency with plot_map.py
     import pandas as pd
-    meta_df = pd.DataFrame(cond.cpu().numpy(), columns=['R', 'A', 'W'])
+    # We use columns expected by dataset.py/plot_map.py
+    meta_df = pd.DataFrame(cond.cpu().numpy(), columns=['airport', 'typecode', 'weather'])
     meta_save_path = os.path.join(output_dir, "sample_trajectory.csv")
     meta_df.to_csv(meta_save_path, index=False)
     print(f"Metadata saved to {meta_save_path}")

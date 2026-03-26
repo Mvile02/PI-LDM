@@ -78,8 +78,12 @@ class PILDMTrainer:
         # We need the predicted trajectory x0_hat in physical space to compute physics loss
         x0_hat = self.predict_x0(x_t, t, pred_noise)
         
-        # Transpose back from (batch, state_dim, seq_len) to (batch, seq_len, state_dim)
-        trajectories = x0_hat.transpose(1, 2)
+        # Denormalize to physical units before computing physics loss
+        from pi_ldm.src.dataset import AircraftTrajectoryDataset
+        x0_phys = AircraftTrajectoryDataset.denormalize(x0_hat)
+        
+        # Transpose from (batch, state_dim, seq_len) to (batch, seq_len, state_dim)
+        trajectories = x0_phys.transpose(1, 2)
         
         loss_physics = self.physics_loss_fn(trajectories)
         
@@ -96,12 +100,13 @@ def main():
     base_dir = os.getcwd()
     data_dir = os.path.join(base_dir, "data", "processed")
     
-    train_loader, _ = get_dataloaders(data_dir, batch_size=32, file_base="X_LSZH_2026-03-01_1000_to_2026-03-01_1200_runway14")
+    # Load all available files
+    train_loader, _ = get_dataloaders(data_dir, batch_size=32, file_base=None)
     
     trainer = PILDMTrainer()
     
     print("Starting Training Loop...")
-    for epoch in range(25):
+    for epoch in range(500):
         epoch_diff = 0
         epoch_phys = 0
         for batch_idx, (x_0, cond) in enumerate(train_loader):
