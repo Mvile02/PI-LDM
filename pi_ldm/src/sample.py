@@ -112,8 +112,8 @@ def main():
     
     sampler = PILDMSampler(model_path=model_path)
     
-    # Generate 20 trajectories for a single condition (e.g., Runway/Airport 1, Type 0, Weather 0)
-    num_samples = 40
+    # Generate x trajectories for a single condition (e.g., Runway/Airport 1, Type 0, Weather 0)
+    num_samples = 30
     cond = torch.tensor([[1.0, 0.5, 0.0]], device=sampler.device).repeat(num_samples, 1)
     
     print(f"Generating {num_samples} trajectories without physics guidance...")
@@ -126,7 +126,7 @@ def main():
     
     # Convert to numpy and save
     traj_np = trajectories.detach().cpu().numpy()
-    save_path = os.path.join(output_dir, "sample_trajectory.npy")
+    save_path = os.path.join(output_dir, "sample_trajectory3.npy")
     np.save(save_path, traj_np)
     print(f"Trajectories saved to {save_path}")
 
@@ -134,7 +134,7 @@ def main():
     import pandas as pd
     # We use columns expected by dataset.py/plot_map.py
     meta_df = pd.DataFrame(cond.cpu().numpy(), columns=['airport', 'typecode', 'weather'])
-    meta_save_path = os.path.join(output_dir, "sample_trajectory.csv")
+    meta_save_path = os.path.join(output_dir, "sample_trajectory3.csv")
     meta_df.to_csv(meta_save_path, index=False)
     print(f"Metadata saved to {meta_save_path}")
 

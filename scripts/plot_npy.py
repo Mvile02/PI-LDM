@@ -38,8 +38,8 @@ def visualize_trajectories(X_filepath, meta_filepath, num_samples=3):
             altitude = X[idx, 2, :]
             x_axis = np.arange(200)
             
-            callsign = meta.iloc[idx]['callsign']
-            ac_type = meta.iloc[idx]['typecode']
+            callsign = meta.iloc[idx]['callsign'] if 'callsign' in meta.columns else f"Sample {idx}"
+            ac_type = meta.iloc[idx]['typecode'] if 'typecode' in meta.columns else "Unknown"
             label = f"{callsign} ({ac_type})"
             
             # Subplot 0: Altitude Profile
@@ -83,12 +83,17 @@ def visualize_trajectories(X_filepath, meta_filepath, num_samples=3):
 if __name__ == "__main__":
     # --- CONFIGURATION AREA ---
     # The base name used in filter_data.py (without extension)
-    FILE_BASE = "X_LSZH_2026-03-01_1200_to_2026-03-01_1400_runway14"
+    FILE_BASE = "sample_trajectory3"
     # --------------------------
 
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     X_file = os.path.join(base_dir, "data", "processed", f"{FILE_BASE}.npy")
     meta_file = os.path.join(base_dir, "data", "processed", f"{FILE_BASE}.csv")
+
+    if not os.path.exists(X_file):
+        # Fallback to outputs/trajectories
+        X_file = os.path.join(base_dir, "outputs", "trajectories", f"{FILE_BASE}.npy")
+        meta_file = os.path.join(base_dir, "outputs", "trajectories", f"{FILE_BASE}.csv")
     
     # Fallback for demo if the above doesn't exist yet
     if not os.path.exists(X_file):

@@ -71,7 +71,7 @@ def compute_positions(X, meta, anchor_lat, anchor_lon):
 
 def main():
     # --- CONFIGURATION AREA ---
-    FILE_BASE = "X_LSZH_2026-03-01_0000_to_2026-03-01_2359_runway14"
+    FILE_BASE = "sample_trajectory3"
     AIRPORT_CODE = "LSZH"
     PLOT_MAP_BACKGROUND = False  # Set to True to overlay geographic map tiles (requires contextily)
     # --------------------------
@@ -112,9 +112,9 @@ def main():
     
     # Refine anchor: Default to Runway 14 if no specific runway is in filename
     mode = FILE_BASE.split("_")[-1]  # e.g., "landings" or "runway14"
-    if "runway" not in mode.lower():
-        mode = "runway14"  # Default fallback
-        print("No runway detected in filename. Defaulting to Runway 14.")
+    if "runway" not in mode.lower() or "sample" in FILE_BASE:
+        mode = "runway14"  # Default fallback for samples
+        print("Forced Runway 14 anchoring for sample/synthetic data.")
         
     anchor_name = "ARP"
     rwy_end_lat = None

@@ -99,9 +99,10 @@ def main():
     # Use current working directory as base
     base_dir = os.getcwd()
     data_dir = os.path.join(base_dir, "data", "processed")
+    FILE_BASE = "X_LSZH_2026-03-01_0000_to_2026-03-01_2359_runway14"
     
     # Load all available files
-    train_loader, _ = get_dataloaders(data_dir, batch_size=32, file_base=None)
+    train_loader, _ = get_dataloaders(data_dir, batch_size=32, file_base=FILE_BASE)
     
     trainer = PILDMTrainer()
     
