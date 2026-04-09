@@ -83,7 +83,7 @@ def visualize_trajectories(X_filepath, meta_filepath, num_samples=3):
 if __name__ == "__main__":
     # --- CONFIGURATION AREA ---
     # The base name used in filter_data.py (without extension)
-    FILE_BASE = "sample_trajectory3"
+    FILE_BASE = "X_LSZH_2026-03-01_1000_to_2026-03-01_1200_runway14"
     # --------------------------
 
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

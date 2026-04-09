@@ -51,6 +51,155 @@ def check_runway14(c_data, start_alt, end_alt, airport, discard_reasons):
         return False
     return True
 
+def trim_taxi_data(flight, airport, mode):
+    """Trims taxiing data while preserving actual landing/takeoff phases."""
+    try:
+        df = flight.data.copy()
+        if len(df) == 0:
+            return flight
+            
+        alt_col = 'geoaltitude' if 'geoaltitude' in df.columns else 'baroaltitude'
+        apt_alt = airport.altitude
+        target_heading = 137
+        
+        start_alt = df[alt_col].iloc[0]
+        end_alt = df[alt_col].iloc[-1]
+        
+        is_landing = (end_alt <= apt_alt + 2500) and ((start_alt - end_alt) >= 1500)
+        is_departure = (start_alt <= apt_alt + 2500) and ((end_alt - start_alt) >= 1500)
+        
+        if is_landing:
+            # Search for trimming ONLY after the aircraft has descended below 250ft above apt
+            in_air_mask = (df[alt_col] > apt_alt + 250)
+            if in_air_mask.any():
+                last_in_air_idx = df.index[in_air_mask][-1]
+                df_after_descent = df.loc[last_in_air_idx:]
+                
+                # Check groundspeed
+                mask_speed = (df_after_descent['groundspeed'] <= 35)
+                idx_speed = df_after_descent.index[mask_speed][0] if mask_speed.any() else None
+                
+                # Check Heading deviation
+                # Convert to numpy to avoid pandas-specific operator issues
+                track_vals = df_after_descent['track'].values.astype(float)
+                h_diffs = (track_vals - target_heading) % 360
+                h_diffs = np.minimum(h_diffs, 360 - h_diffs)
+                mask_heading = (h_diffs > 30)
+                
+                idx_heading = df_after_descent.index[mask_heading][0] if mask_heading.any() else None
+                
+                cut_idx = None
+                if idx_speed is not None and idx_heading is not None:
+                    cut_idx = min(idx_speed, idx_heading)
+                elif idx_speed is not None:
+                    cut_idx = idx_speed
+                elif idx_heading is not None:
+                    cut_idx = idx_heading
+                    
+                if cut_idx is not None:
+                    df = df.loc[:cut_idx]
+                    
+        elif is_departure:
+            # Search for takeoff roll start ONLY among ground points
+            in_air_mask = (df[alt_col] > apt_alt + 250)
+            if in_air_mask.any():
+                first_in_air_idx = df.index[in_air_mask][0]
+                df_before_climb = df.loc[:first_in_air_idx]
+                
+                mask_takeoff = (df_before_climb['groundspeed'] >= 50)
+                if mask_takeoff.any():
+                    idx_takeoff = df_before_climb.index[mask_takeoff][0]
+                    prev_df = df_before_climb.loc[:idx_takeoff]
+                    mask_start = (prev_df['groundspeed'] <= 25)
+                    if mask_start.any():
+                        start_idx = prev_df.index[mask_start][-1]
+                        df = df.loc[start_idx:]
+                    
+        return Flight(df)
+    except Exception as e:
+        # Log and return original flight if trimming fails
+        logger.debug(f"Trimming failed for flight: {e}")
+        return flight
+
+def denoise_flight(flight):
+    """
+    Applies high-grade denoising with local MAD detection, global speed clipping,
+    and physical acceleration capping (Forward-Backward).
+    """
+    try:
+        df = flight.data.copy()
+        alt_col = 'geoaltitude' if 'geoaltitude' in df.columns else 'baroaltitude'
+
+        # Time deltas for physics caps
+        if 'timestamp' in df.columns:
+            times = pd.to_datetime(df['timestamp'], unit='s', utc=True)
+            dt = times.diff().dt.total_seconds().fillna(1.0).values
+        else:
+            dt = np.ones(len(df))
+
+        # 1. Physical Continuity Integrator
+        def apply_physical_cap(values, deltas, max_rate, circular=False):
+            capped = values.astype(float).copy()
+            for pass_idx in range(2):
+                indices = range(1, len(capped)) if pass_idx == 0 else range(len(capped)-2, -1, -1)
+                for i in indices:
+                    prev = i - 1 if pass_idx == 0 else i + 1
+                    dt_val = deltas[i] if pass_idx == 0 else deltas[i+1]
+                    diff = capped[i] - capped[prev]
+                    if circular:
+                        diff = (diff + 180) % 360 - 180
+                    limit = max_rate * dt_val
+                    if abs(diff) > limit:
+                        step = np.sign(diff) * limit
+                        capped[i] = (capped[prev] + step) % 360 if circular else capped[prev] + step
+            return capped
+
+        if 'groundspeed' in df.columns:
+            # 2.5 kts/s is the realistic max for a commercial jet on approach
+            df['groundspeed'] = apply_physical_cap(df['groundspeed'].values, dt, 2.5)
+            # GLOBAL CLIP: Civil threshold below 10,000 ft at LSZH
+            if alt_col in df.columns:
+                df.loc[(df['groundspeed'] > 320) & (df[alt_col] < 10000), 'groundspeed'] = np.nan
+        
+        if alt_col in df.columns:
+            # 80 ft/s (~4800 fpm) is more than enough for a standard civil descent
+            df[alt_col] = apply_physical_cap(df[alt_col].values, dt, 80.0)
+
+        if 'track' in df.columns:
+            # 5 deg/s is a standard 'brisk' turn rate
+            df['track'] = apply_physical_cap(df['track'].values, dt, 5.0, circular=True)
+
+        # 2. Hampel / Median cleaning
+        for col in ['groundspeed', alt_col, 'track']:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+                # Pre-clean with window 15 median
+                df[col] = df[col].rolling(window=15, center=True).median()
+                df[col] = df[col].interpolate(method='linear').ffill().bfill()
+
+        # 3. Sin/Cos Smoothing for Track
+        if 'track' in df.columns:
+            track_rad = np.radians(df['track'].values)
+            t_sin = pd.Series(np.sin(track_rad)).rolling(window=71, center=True).median().rolling(window=31, center=True).mean().ffill().bfill()
+            t_cos = pd.Series(np.cos(track_rad)).rolling(window=71, center=True).median().rolling(window=31, center=True).mean().ffill().bfill()
+            df['track'] = np.degrees(np.arctan2(t_sin.values, t_cos.values)) % 360
+
+        # 4. Heavy Signal Smoothing
+        for col in ['groundspeed', alt_col]:
+            if col in df.columns:
+                df[col] = df[col].rolling(window=71, center=True).median().ffill().bfill()
+                df[col] = df[col].rolling(window=31, center=True).mean().ffill().bfill()
+        
+        new_flight = Flight(df)
+        for attr in ['icao24', 'callsign', 'registration', 'typecode']:
+            if hasattr(flight, attr): setattr(new_flight, attr, getattr(flight, attr))
+        
+        return new_flight.simplify(tolerance=1e-3)
+
+    except Exception as e:
+        logger.debug(f"Denoising failed: {e}")
+        return flight
+
 def filter_and_process(input_path, airport_code, output_base, mode="landings"):
     """
     Loads raw traffic data, filters based on mode, resamples, and saves as .npy and .csv.
@@ -139,6 +288,17 @@ def filter_and_process(input_path, airport_code, output_base, mode="landings"):
             else:
                 logger.error(f"Unknown mode: {mode}")
                 return False
+            
+            # --- DENOISE DATA ---
+            cleaned_flight = denoise_flight(cleaned_flight)
+            # --------------------
+            
+            # --- TRIM TAXI DATA ---
+            cleaned_flight = trim_taxi_data(cleaned_flight, airport, mode)
+            if len(cleaned_flight) < 50:
+                discard_reasons["too_short"] += 1
+                continue
+            # ----------------------
                 
             # 4. Resample
             resampled = cleaned_flight.resample(NUM_WAYPOINTS)
@@ -148,7 +308,7 @@ def filter_and_process(input_path, airport_code, output_base, mode="landings"):
                 
             r_data = resampled.data
             
-            # 5. Extract Aircraft Type
+            # icao24 / ac_type lookup
             icao24 = getattr(flight, 'icao24', None)
             ac_type = "UNKNOWN"
             if icao24:
@@ -166,6 +326,30 @@ def filter_and_process(input_path, airport_code, output_base, mode="landings"):
                 r_data[alt_col].values,
                 elapsed_time
             ])
+            
+            # --- FINAL BRUTE-FORCE PHYSICAL SAFEGUARD ---
+            # Ultra-realistic capping on the final 200-point array.
+            total_duration = X_i[3, -1]
+            dt_avg = total_duration / (NUM_WAYPOINTS - 1)
+            
+            for j in range(1, NUM_WAYPOINTS):
+                # 1. GS Cap (2.5 kts/s)
+                gs_diff = X_i[1, j] - X_i[1, j-1]
+                gs_limit = 2.5 * dt_avg
+                if abs(gs_diff) > gs_limit:
+                    X_i[1, j] = X_i[1, j-1] + np.sign(gs_diff) * gs_limit
+                
+                # 2. Alt Cap (80 ft/s)
+                alt_diff = X_i[2, j] - X_i[2, j-1]
+                alt_limit = 80.0 * dt_avg
+                if abs(alt_diff) > alt_limit:
+                    X_i[2, j] = X_i[2, j-1] + np.sign(alt_diff) * alt_limit
+                
+                # 3. Track Cap (5 deg/s)
+                tr_diff = (X_i[0, j] - X_i[0, j-1] + 180) % 360 - 180
+                tr_limit = 5.0 * dt_avg
+                if abs(tr_diff) > tr_limit:
+                    X_i[0, j] = (X_i[0, j-1] + np.sign(tr_diff) * tr_limit) % 360
             
             # 7. Final validation
             if X_i.shape == (4, NUM_WAYPOINTS) and not np.isnan(X_i).any():

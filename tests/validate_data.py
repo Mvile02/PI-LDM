@@ -3,7 +3,7 @@ import pandas as pd
 import os
 
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-FILE_BASE = "TEST"
+FILE_BASE = "X_LSZH_2026-03-01_1000_to_2026-03-01_1200_runway14"
 X_file = os.path.join(base_dir, "data", "processed", f"{FILE_BASE}.npy")
 meta_file = os.path.join(base_dir, "data", "processed", f"{FILE_BASE}.csv")
 
