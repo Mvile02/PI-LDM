@@ -200,7 +200,25 @@ def denoise_flight(flight):
         logger.debug(f"Denoising failed: {e}")
         return flight
 
-def filter_and_process(input_path, airport_code, output_base, mode="landings", max_flights=None, denoise=True):
+def load_manual_aircraft_db(path):
+    """Loads OpenSky aircraft database from a manual CSV file."""
+    if not os.path.exists(path):
+        logger.warning(f"Manual aircraft database not found at {path}. Falling back to default methods.")
+        return None
+    
+    try:
+        logger.info(f"Loading manual aircraft database from {path}...")
+        # Only load icao24 and typecode to save memory
+        df = pd.read_csv(path, usecols=['icao24', 'typecode'], low_memory=False)
+        # Drop rows with no typecode and set index for fast lookup
+        df = df.dropna(subset=['typecode'])
+        # Create a lowercase mapping for the lookup
+        return dict(zip(df['icao24'].str.lower(), df['typecode']))
+    except Exception as e:
+        logger.warning(f"Failed to load manual aircraft database: {e}. Ensure icao24 and typecode columns exist.")
+        return None
+
+def filter_and_process(input_path, airport_code, output_base, mode="landings", max_flights=None, denoise=True, aircraft_db_path=None):
     """
     Loads raw traffic data, filters based on mode, resamples, and saves as .npy and .csv.
     """
@@ -238,6 +256,9 @@ def filter_and_process(input_path, airport_code, output_base, mode="landings", m
     if airport is None:
         logger.error(f"Airport code {airport_code} not found.")
         return False
+    
+    # Load manual aircraft database if provided
+    manual_db = load_manual_aircraft_db(aircraft_db_path) if aircraft_db_path else None
     
     logger.info(f"Processing {len(traffic_data)} flights for {airport_code}...")
     
@@ -316,12 +337,20 @@ def filter_and_process(input_path, airport_code, output_base, mode="landings", m
             # icao24 / ac_type lookup
             icao24 = getattr(flight, 'icao24', None)
             ac_type = "UNKNOWN"
-            if icao24:
-                ac_db_entry = aircraft.get(icao24)
-                if ac_db_entry is not None:
-                    ac_type = ac_db_entry.get("typecode", "UNKNOWN")
             
-            # 6. Build Tensor (4 x 200)
+            # 1. Try manual DB first (Local and reliable)
+            if icao24 and manual_db:
+                ac_type = manual_db.get(icao24.lower(), "UNKNOWN")
+            
+            # 2. Fallback to traffic library (If manual DB failed or missing)
+            if ac_type == "UNKNOWN" and icao24 and aircraft is not None:
+                try:
+                    ac_db_entry = aircraft.get(icao24)
+                    if ac_db_entry is not None:
+                        ac_type = ac_db_entry.get("typecode", "UNKNOWN")
+                except Exception:
+                    pass
+            
             start_t = r_data['timestamp'].min()
             elapsed_time = (r_data['timestamp'] - start_t).dt.total_seconds().values
             
@@ -411,6 +440,10 @@ if __name__ == "__main__":
     DENOISE = True # Set to True to clean data, False to see raw noise
     MAX_FLIGHTS = 500  # Set to None for full processing, or a number for testing
     
+    # Optional: Path to a manually downloaded OpenSky aircraft database CSV
+    # Download from: https://s3.opensky-network.org/data-samples/metadata/aircraft-database-complete-2025-08.csv
+    AIRCRAFT_DB_FILE = "data/aircraft_db.csv"
+    
     # Custom output name
     suffix = "raw" if not DENOISE else "denoised"
     OUTPUT_BASE = f"X_{AIRPORT}_2019_benchmark_{MODE}_{suffix}"
@@ -418,6 +451,8 @@ if __name__ == "__main__":
 
     base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     full_input_path = os.path.join(base_path, INPUT_FILE)
+    full_db_path = os.path.join(base_path, AIRCRAFT_DB_FILE)
     
     filter_and_process(full_input_path, AIRPORT, OUTPUT_BASE, 
-                       mode=MODE, max_flights=MAX_FLIGHTS, denoise=DENOISE)
+                       mode=MODE, max_flights=MAX_FLIGHTS, denoise=DENOISE,
+                       aircraft_db_path=full_db_path)
