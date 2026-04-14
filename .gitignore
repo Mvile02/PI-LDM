@@ -1,5 +1,8 @@
 venv
 SOKOLOV-diffusion-trajectory-generation-main
+TimeGAN_Trajectories-main
+outputs/
+data/
 __pycache__
 .env
 .vscode

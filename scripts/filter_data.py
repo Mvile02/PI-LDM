@@ -200,7 +200,7 @@ def denoise_flight(flight):
         logger.debug(f"Denoising failed: {e}")
         return flight
 
-def filter_and_process(input_path, airport_code, output_base, mode="landings"):
+def filter_and_process(input_path, airport_code, output_base, mode="landings", max_flights=None, denoise=True):
     """
     Loads raw traffic data, filters based on mode, resamples, and saves as .npy and .csv.
     """
@@ -246,6 +246,10 @@ def filter_and_process(input_path, airport_code, output_base, mode="landings"):
     discard_reasons = {"too_short": 0, "no_alt": 0, "ends_high": 0, "no_descent": 0, "resample_fail": 0, "unexpected_error": 0}
     
     for i, flight in enumerate(traffic_data):
+        if max_flights is not None and len(processed_tensors) >= max_flights:
+            logger.info(f"Reached limit of {max_flights} flights. Stopping early.")
+            break
+
         if i % 100 == 0:
             logger.info(f"Progress: {i}/{len(traffic_data)} flights... Current discards: {discard_reasons}")
             
@@ -285,20 +289,21 @@ def filter_and_process(input_path, airport_code, output_base, mode="landings"):
             elif mode == "runway14":
                 if not check_runway14(c_data, start_alt, end_alt, airport, discard_reasons):
                     continue
+            elif mode == "all":
+                pass # Accept everything
             else:
                 logger.error(f"Unknown mode: {mode}")
                 return False
             
             # --- DENOISE DATA ---
-            cleaned_flight = denoise_flight(cleaned_flight)
+            if denoise:
+                cleaned_flight = denoise_flight(cleaned_flight)
+                # --- TRIM TAXI DATA ---
+                cleaned_flight = trim_taxi_data(cleaned_flight, airport, mode)
+                if len(cleaned_flight) < 50:
+                    discard_reasons["too_short"] += 1
+                    continue
             # --------------------
-            
-            # --- TRIM TAXI DATA ---
-            cleaned_flight = trim_taxi_data(cleaned_flight, airport, mode)
-            if len(cleaned_flight) < 50:
-                discard_reasons["too_short"] += 1
-                continue
-            # ----------------------
                 
             # 4. Resample
             resampled = cleaned_flight.resample(NUM_WAYPOINTS)
@@ -328,28 +333,29 @@ def filter_and_process(input_path, airport_code, output_base, mode="landings"):
             ])
             
             # --- FINAL BRUTE-FORCE PHYSICAL SAFEGUARD ---
-            # Ultra-realistic capping on the final 200-point array.
-            total_duration = X_i[3, -1]
-            dt_avg = total_duration / (NUM_WAYPOINTS - 1)
-            
-            for j in range(1, NUM_WAYPOINTS):
-                # 1. GS Cap (2.5 kts/s)
-                gs_diff = X_i[1, j] - X_i[1, j-1]
-                gs_limit = 2.5 * dt_avg
-                if abs(gs_diff) > gs_limit:
-                    X_i[1, j] = X_i[1, j-1] + np.sign(gs_diff) * gs_limit
+            if denoise:
+                # Ultra-realistic capping on the final 200-point array.
+                total_duration = X_i[3, -1]
+                dt_avg = total_duration / (NUM_WAYPOINTS - 1)
                 
-                # 2. Alt Cap (80 ft/s)
-                alt_diff = X_i[2, j] - X_i[2, j-1]
-                alt_limit = 80.0 * dt_avg
-                if abs(alt_diff) > alt_limit:
-                    X_i[2, j] = X_i[2, j-1] + np.sign(alt_diff) * alt_limit
-                
-                # 3. Track Cap (5 deg/s)
-                tr_diff = (X_i[0, j] - X_i[0, j-1] + 180) % 360 - 180
-                tr_limit = 5.0 * dt_avg
-                if abs(tr_diff) > tr_limit:
-                    X_i[0, j] = (X_i[0, j-1] + np.sign(tr_diff) * tr_limit) % 360
+                for j in range(1, NUM_WAYPOINTS):
+                    # 1. GS Cap (2.5 kts/s)
+                    gs_diff = X_i[1, j] - X_i[1, j-1]
+                    gs_limit = 2.5 * dt_avg
+                    if abs(gs_diff) > gs_limit:
+                        X_i[1, j] = X_i[1, j-1] + np.sign(gs_diff) * gs_limit
+                    
+                    # 2. Alt Cap (80 ft/s)
+                    alt_diff = X_i[2, j] - X_i[2, j-1]
+                    alt_limit = 80.0 * dt_avg
+                    if abs(alt_diff) > alt_limit:
+                        X_i[2, j] = X_i[2, j-1] + np.sign(alt_diff) * alt_limit
+                    
+                    # 3. Track Cap (5 deg/s)
+                    tr_diff = (X_i[0, j] - X_i[0, j-1] + 180) % 360 - 180
+                    tr_limit = 5.0 * dt_avg
+                    if abs(tr_diff) > tr_limit:
+                        X_i[0, j] = (X_i[0, j-1] + np.sign(tr_diff) * tr_limit) % 360
             
             # 7. Final validation
             if X_i.shape == (4, NUM_WAYPOINTS) and not np.isnan(X_i).any():
@@ -397,20 +403,21 @@ def filter_and_process(input_path, airport_code, output_base, mode="landings"):
 
 if __name__ == "__main__":
     # --- CONFIGURATION AREA ---
-    # Path to the raw .parquet file generated by extract_data.py
-    INPUT_FILE = "data/raw/raw_LSZH_2026-03-01_0000_to_2026-03-01_2359.parquet"
-    # INPUT_FILE = r"C:\Users\usuario\AppData\Local\opensky\opensky\Cache\2e5494993196293f8f40bbc1c3b2caa2.parquet"
-    MODE = "runway14"  # Options: "landings", "runway14"
+    # Path to the raw .parquet file
+    INPUT_FILE = "data/raw/LSZH_2019_10_01_to_11_30_benchmark2.parquet"
     
-    START_TIME = INPUT_FILE.split("_")[2] + "_" + INPUT_FILE.split("_")[3]
-    END_TIME = INPUT_FILE.split("_")[5] + "_" + INPUT_FILE.split("_")[6][:4]
-    AIRPORT = INPUT_FILE.split("_")[1]
-    OUTPUT_BASE = f"X_{AIRPORT}_{START_TIME}_to_{END_TIME}_{MODE}"
-    # AIRPORT = "LSZH"
-    # OUTPUT_BASE = "TEST"
+    AIRPORT = "LSZH"
+    MODE = "runway14"  # Options: "landings", "runway14", "all"
+    DENOISE = True # Set to True to clean data, False to see raw noise
+    MAX_FLIGHTS = 500  # Set to None for full processing, or a number for testing
+    
+    # Custom output name
+    suffix = "raw" if not DENOISE else "denoised"
+    OUTPUT_BASE = f"X_{AIRPORT}_2019_benchmark_{MODE}_{suffix}"
     # --------------------------
 
     base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     full_input_path = os.path.join(base_path, INPUT_FILE)
     
-    filter_and_process(full_input_path, AIRPORT, OUTPUT_BASE, mode=MODE)
+    filter_and_process(full_input_path, AIRPORT, OUTPUT_BASE, 
+                       mode=MODE, max_flights=MAX_FLIGHTS, denoise=DENOISE)

@@ -71,7 +71,8 @@ def compute_positions(X, meta, anchor_lat, anchor_lon):
 
 def main():
     # --- CONFIGURATION AREA ---
-    FILE_BASE = "sample_trajectory3"
+    #FILE_BASE = "sample_trajectory_denoised"
+    FILE_BASE = "X_LSZH_2019_benchmark_runway14_denoised"
     AIRPORT_CODE = "LSZH"
     PLOT_MAP_BACKGROUND = False  # Set to True to overlay geographic map tiles (requires contextily)
     # --------------------------
