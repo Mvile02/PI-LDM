@@ -3,6 +3,11 @@ import argparse
 import logging
 import pandas as pd
 import numpy as np
+
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
 from traffic.core import Traffic, Flight
 from traffic.data import airports
 try:
@@ -10,10 +15,6 @@ try:
 except Exception as e:
     logger.warning(f"Could not load aircraft database (OpenSky timeout). Metadata will be restricted: {e}")
     aircraft = None
-
-# Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
 
 # Constants
 NUM_WAYPOINTS = 200
@@ -213,8 +214,8 @@ def load_manual_aircraft_db(path):
     
     try:
         logger.info(f"Loading manual aircraft database from {path}...")
-        # Only load icao24 and typecode to save memory
-        df = pd.read_csv(path, usecols=['icao24', 'typecode'], low_memory=False)
+        # Use quotechar="'" because the OpenSky CSV uses single quotes around values
+        df = pd.read_csv(path, sep=None, engine='python', quotechar="'", usecols=['icao24', 'typecode'])
         # Drop rows with no typecode and set index for fast lookup
         df = df.dropna(subset=['typecode'])
         # Create a lowercase mapping for the lookup
@@ -447,7 +448,7 @@ if __name__ == "__main__":
     
     # Optional: Path to a manually downloaded OpenSky aircraft database CSV
     # Download from: https://s3.opensky-network.org/data-samples/metadata/aircraft-database-complete-2025-08.csv
-    AIRCRAFT_DB_FILE = "data/aircraft_db.csv"
+    AIRCRAFT_DB_FILE = "data/aircraft-database-complete-2025-08.csv"
     
     # Custom output name
     suffix = "raw" if not DENOISE else "denoised"

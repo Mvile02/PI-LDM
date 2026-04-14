@@ -122,7 +122,7 @@ def main():
     print("Generated shape:", trajectories.shape)
 
     # Save the generated trajectories
-    output_dir = os.path.join(base_dir, "outputs", "trajectories")
+    output_dir = os.path.join(base_dir, "pi_ldm", "outputs", "trajectories")
     os.makedirs(output_dir, exist_ok=True)
     
     # Convert to numpy and save
