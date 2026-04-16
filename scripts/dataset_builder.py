@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 from traffic.data.datasets import landing_zurich_2019
 from sklearn.model_selection import train_test_split
+from tqdm import tqdm
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 
@@ -45,7 +46,7 @@ class DatasetBuilder:
         """Categorizes flights into nominal, go-arounds, and holds."""
         categorized = {'nominal': [], 'go_around': [], 'holding': []}
         
-        for flight in traffic_data:
+        for flight in tqdm(traffic_data, desc="Categorizing flights (Checking go-arounds/holds)"):
             df = flight.data
             if flight.go_around(airport_code).has():
                 categorized['go_around'].append(df)
@@ -69,7 +70,7 @@ class DatasetBuilder:
     def build_tensor(self, flight_list):
         """Converts a list of flight dataframes into a (N, features, seq_len) numpy array."""
         processed_flights = []
-        for df in flight_list:
+        for df in tqdm(flight_list, desc="Building sequence tensors"):
             resampled = self.resample_flight(df)
             timed = self.compute_elapsed_time(resampled)
             

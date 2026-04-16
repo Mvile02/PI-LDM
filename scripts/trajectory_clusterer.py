@@ -11,6 +11,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tslearn.clustering import TimeSeriesKMeans
 import os
+from tqdm import tqdm
 
 class TrajectoryClusterer:
     def __init__(self, data_path):
@@ -35,7 +36,8 @@ class TrajectoryClusterer:
             metric="dtw", 
             max_iter=15, 
             n_init=10, 
-            dtw_inertia=True
+            dtw_inertia=True,
+            verbose=1
         )
         
         kmeans.fit(target_data)
@@ -56,7 +58,8 @@ class TrajectoryClusterer:
                 metric="dtw", 
                 max_iter=5, 
                 n_init=2, 
-                dtw_inertia=True
+                dtw_inertia=True,
+                verbose=1
             )
             kmeans.fit(target_data)
             inertias.append(kmeans.inertia_)
@@ -87,7 +90,7 @@ if __name__ == '__main__':
         # We cluster based on track and groundspeed (indices 0 and 1)
         target_cluster_counts = [2, 3, 4, 5]
         
-        for k in target_cluster_counts:
+        for k in tqdm(target_cluster_counts, desc="Processing k-clusters"):
             labels, centers = clusterer.perform_clustering(num_clusters=k, use_features_idx=(0, 1))
             
             output_filename = os.path.join(processed_dir, f"{input_base}_clust{k}.npz")
