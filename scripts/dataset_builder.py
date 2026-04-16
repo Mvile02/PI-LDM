@@ -79,7 +79,7 @@ class DatasetBuilder:
                 continue
                 
             # Transpose to (features, seq_len)
-            tensor_slice = timed[self.features].to_numpy().T
+            tensor_slice = timed[self.features].to_numpy(dtype=np.float32).T
             processed_flights.append(tensor_slice)
             
         return np.stack(processed_flights) if processed_flights else np.array([])

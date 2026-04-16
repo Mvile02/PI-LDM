@@ -72,7 +72,7 @@ def compute_positions(X, meta, anchor_lat, anchor_lon):
 def main():
     # --- CONFIGURATION AREA ---
     #FILE_BASE = "sample_trajectory_denoised"
-    FILE_BASE = "X_LSZH_2019_benchmark_runway14_denoised"
+    FILE_BASE = "LSZH_2019_R14_kinematic_200pts"
     AIRPORT_CODE = "LSZH"
     PLOT_MAP_BACKGROUND = False  # Set to True to overlay geographic map tiles (requires contextily)
     # --------------------------
@@ -94,7 +94,7 @@ def main():
         return
         
     print(f"Loading data from: {X_file}")
-    X = np.load(X_file)
+    X = np.load(X_file, allow_pickle=True).astype(np.float32)
     
     # Metadata is now optional
     meta = None
