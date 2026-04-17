@@ -17,6 +17,7 @@ from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 
 warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 
 class DatasetBuilder:
@@ -68,8 +69,9 @@ class DatasetBuilder:
         return runways
 
     def build_tensor(self, flight_list):
-        """Converts a list of flight dataframes into a (N, features, seq_len) numpy array."""
+        """Converts a list of flight dataframes into a (N, features, seq_len) numpy array and extracts metadata."""
         processed_flights = []
+        metadata_records = []
         for df in tqdm(flight_list, desc="Building sequence tensors"):
             resampled = self.resample_flight(df)
             timed = self.compute_elapsed_time(resampled)
@@ -82,7 +84,19 @@ class DatasetBuilder:
             tensor_slice = timed[self.features].to_numpy(dtype=np.float32).T
             processed_flights.append(tensor_slice)
             
-        return np.stack(processed_flights) if processed_flights else np.array([])
+            # Extract metadata for this flight
+            meta = {
+                'callsign': df['callsign'].iloc[0] if 'callsign' in df.columns else 'Unknown',
+                'typecode': df['typecode'].iloc[0] if 'typecode' in df.columns else 'Unknown',
+                'icao24': df['icao24'].iloc[0] if 'icao24' in df.columns else 'Unknown'
+            }
+            if 'flight_id' in df.columns:
+                meta['flight_id'] = df['flight_id'].iloc[0]
+            metadata_records.append(meta)
+            
+        tensor_array = np.stack(processed_flights) if processed_flights else np.array([])
+        meta_df = pd.DataFrame(metadata_records)
+        return tensor_array, meta_df
 
 
 if __name__ == '__main__':
@@ -99,16 +113,19 @@ if __name__ == '__main__':
     
     if '14' in runways:
         print(f"Building kinematic tensor for {len(runways['14'])} flights on Runway 14.")
-        tensor_rwy14 = builder.build_tensor(runways['14'])
+        tensor_rwy14, meta_rwy14 = builder.build_tensor(runways['14'])
         
         # Determine output directory
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         processed_dir = os.path.join(base_dir, 'data', 'processed')
         os.makedirs(processed_dir, exist_ok=True)
         
-        # Save array with a descriptive name
+        # Save array and CSV
         output_base = "LSZH_2019_R14_kinematic_200pts"
-        output_name = os.path.join(processed_dir, f"{output_base}.npy")
+        output_name_npy = os.path.join(processed_dir, f"{output_base}.npy")
+        output_name_csv = os.path.join(processed_dir, f"{output_base}.csv")
         
-        np.save(output_name, tensor_rwy14)
-        print(f"Saved {output_name} with shape: {tensor_rwy14.shape}")
+        np.save(output_name_npy, tensor_rwy14)
+        meta_rwy14.to_csv(output_name_csv, index=False)
+        print(f"Saved {output_name_npy} with shape: {tensor_rwy14.shape}")
+        print(f"Saved {output_name_csv} with metadata for {len(meta_rwy14)} flights")

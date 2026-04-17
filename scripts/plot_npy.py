@@ -7,12 +7,15 @@ import matplotlib.pyplot as plt
 def visualize_trajectories(X_filepath, meta_filepath, num_samples=3):
     # Load the tensors and metadata
     try:
-        X = np.load(X_filepath)
-        meta = pd.read_csv(meta_filepath)
+        X = np.load(X_filepath, allow_pickle=True).astype(np.float32)
         print(f"Loaded tensor of shape: {X.shape}")
     except FileNotFoundError:
-        print(f"Could not find the data files at: {X_filepath} or {meta_filepath}")
+        print(f"Could not find the numpy data file at: {X_filepath}")
         return
+        
+    meta = None
+    if os.path.exists(meta_filepath):
+        meta = pd.read_csv(meta_filepath)
 
     print("Press 'n' in the plot window to see a new set of random trajectories.")
     
@@ -38,8 +41,8 @@ def visualize_trajectories(X_filepath, meta_filepath, num_samples=3):
             altitude = X[idx, 2, :]
             x_axis = np.arange(200)
             
-            callsign = meta.iloc[idx]['callsign'] if 'callsign' in meta.columns else f"Sample {idx}"
-            ac_type = meta.iloc[idx]['typecode'] if 'typecode' in meta.columns else "Unknown"
+            callsign = meta.iloc[idx]['callsign'] if meta is not None and 'callsign' in meta.columns else f"Sample {idx}"
+            ac_type = meta.iloc[idx]['typecode'] if meta is not None and 'typecode' in meta.columns else "Unknown"
             label = f"{callsign} ({ac_type})"
             
             # Subplot 0: Altitude Profile
@@ -83,7 +86,7 @@ def visualize_trajectories(X_filepath, meta_filepath, num_samples=3):
 if __name__ == "__main__":
     # --- CONFIGURATION AREA ---
     # The base name used in filter_data.py (without extension)
-    FILE_BASE = "X_LSZH_2019_benchmark_runway142"
+    FILE_BASE = "LSZH_2019_R14_kinematic_200pts"
     #FILE_BASE = "sample_trajectory_denoised"
     # --------------------------
 
