@@ -35,9 +35,10 @@ class TrajectoryClusterer:
             n_clusters=num_clusters, 
             metric="dtw", 
             max_iter=15, 
-            n_init=10, 
+            n_init=3, 
             dtw_inertia=True,
-            verbose=1
+            verbose=1,
+            n_jobs=-1
         )
         
         kmeans.fit(target_data)
@@ -57,9 +58,10 @@ class TrajectoryClusterer:
                 n_clusters=k, 
                 metric="dtw", 
                 max_iter=5, 
-                n_init=2, 
+                n_init=1, 
                 dtw_inertia=True,
-                verbose=1
+                verbose=1,
+                n_jobs=-1
             )
             kmeans.fit(target_data)
             inertias.append(kmeans.inertia_)
