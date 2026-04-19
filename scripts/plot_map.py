@@ -81,20 +81,31 @@ def main():
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     
     # Try multiple possible locations for the file
-    X_file = os.path.join(base_dir, "data", "processed", f"{FILE_BASE}.npy")
+    X_file_npz = os.path.join(base_dir, "data", "clusters", f"{FILE_BASE}.npz")
+    X_file_npy = os.path.join(base_dir, "data", "processed", f"{FILE_BASE}.npy")
     meta_file = os.path.join(base_dir, "data", "processed", f"{FILE_BASE}.csv")
     
-    if not os.path.exists(X_file):
+    labels = None
+    if os.path.exists(X_file_npz):
+        print(f"Loading CLUSTERED data from: {X_file_npz}")
+        with np.load(X_file_npz, allow_pickle=True) as npz:
+            X = npz['X'].astype(np.float32)
+            if 'y' in npz:
+                labels = npz['y']
+                print(f"Detected {len(np.unique(labels))} cluster groups.")
+    elif os.path.exists(X_file_npy):
+        print(f"Loading data from: {X_file_npy}")
+        X = np.load(X_file_npy, allow_pickle=True).astype(np.float32)
+    else:
         # Fallback to outputs/trajectories
-        X_file = os.path.join(base_dir, "outputs", "trajectories", f"{FILE_BASE}.npy")
-        meta_file = os.path.join(base_dir, "outputs", "trajectories", f"{FILE_BASE}.csv")
-
-    if not os.path.exists(X_file):
-        print(f"Error: .npy file not found for {FILE_BASE}")
-        return
-        
-    print(f"Loading data from: {X_file}")
-    X = np.load(X_file, allow_pickle=True).astype(np.float32)
+        X_file_npy = os.path.join(base_dir, "outputs", "trajectories", f"{FILE_BASE}.npy")
+        if os.path.exists(X_file_npy):
+            print(f"Loading fallback data from: {X_file_npy}")
+            X = np.load(X_file_npy, allow_pickle=True).astype(np.float32)
+            meta_file = os.path.join(base_dir, "outputs", "trajectories", f"{FILE_BASE}.csv")
+        else:
+            print(f"Error: Neither .npz nor .npy file found for {FILE_BASE}")
+            return
     
     # Metadata is now optional
     meta = None
@@ -152,23 +163,38 @@ def main():
     plt.title(f'Integrated Processed Trajectories for {AIRPORT_CODE} (N={len(X)})')
     
     # Plot flights
-    has_dep = False
-    has_arr = False
-    for i in range(len(X)):
-        if is_deps[i]:
-            color = 'red'
-            label = 'Departure' if not has_dep else None
-            has_dep = True
-        else:
-            color = 'blue'
-            label = 'Landing' if not has_arr else None
-            has_arr = True
-            
-        plt.plot(Lons[i, :], Lats[i, :], color=color, alpha=0.3, linewidth=1.0, label=label)
-        #plt.plot(Lons[i, :], Lats[i, :], color='blue', alpha=0.3, linewidth=1.0)
+    if labels is not None:
+        unique_labels = np.unique(labels)
+        cmap = plt.cm.get_cmap('Set1', len(unique_labels))
+        # Create a legend proxy dict
+        legend_handles = {}
+        for i in range(len(X)):
+            cluster_id = labels[i]
+            color = cmap(cluster_id)
+            line, = plt.plot(Lons[i, :], Lats[i, :], color=color, alpha=0.3, linewidth=1.0)
+            if cluster_id not in legend_handles:
+                legend_handles[cluster_id] = line
+                
+        # Manually assign legends for clusters
+        for cluster_id, line in sorted(legend_handles.items()):
+            line.set_label(f'Cluster {cluster_id}')
+    else:
+        has_dep = False
+        has_arr = False
+        for i in range(len(X)):
+            if is_deps[i]:
+                color = 'red'
+                label = 'Departure' if not has_dep else None
+                has_dep = True
+            else:
+                color = 'blue'
+                label = 'Landing' if not has_arr else None
+                has_arr = True
+                
+            plt.plot(Lons[i, :], Lats[i, :], color=color, alpha=0.3, linewidth=1.0, label=label)
         
     # Plot Airport/Runway Marker
-    plt.scatter(anchor_lon, anchor_lat, color='red', marker='x', s=100, label=f'{AIRPORT_CODE} {anchor_name} Threshold', zorder=5)
+    plt.scatter(anchor_lon, anchor_lat, color='red', marker='x', s=100, label=f'{AIRPORT_CODE} {anchor_name}', zorder=5)
     
     # Plot real physical runway strip if possible
     if rwy_end_lat and rwy_end_lon:

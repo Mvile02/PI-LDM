@@ -79,9 +79,11 @@ if __name__ == '__main__':
     # Initialize the clusterer with our kinematic dataset
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     processed_dir = os.path.join(base_dir, 'data', 'processed')
+    clusters_dir = os.path.join(base_dir, 'data', 'clusters')
     os.makedirs(processed_dir, exist_ok=True)
+    os.makedirs(clusters_dir, exist_ok=True)
     
-    input_base = "lszh_2019_runway14_kinematic_200pts"
+    input_base = "LSZH_2019_R14_kinematic_200pts"
     dataset_file = os.path.join(processed_dir, f"{input_base}.npy")
     
     if not os.path.exists(dataset_file):
@@ -95,6 +97,6 @@ if __name__ == '__main__':
         for k in tqdm(target_cluster_counts, desc="Processing k-clusters"):
             labels, centers = clusterer.perform_clustering(num_clusters=k, use_features_idx=(0, 1))
             
-            output_filename = os.path.join(processed_dir, f"{input_base}_clust{k}.npz")
+            output_filename = os.path.join(clusters_dir, f"{input_base}_clust{k}.npz")
             np.savez(output_filename, X=clusterer.raw_tensor, y=labels)
             print(f"-> Saved assigned clusters to '{output_filename}' (Labels shape: {labels.shape})\n")

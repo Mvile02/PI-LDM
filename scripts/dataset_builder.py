@@ -26,6 +26,19 @@ class DatasetBuilder:
             features = ['track', 'groundspeed', 'altitude', 'time']
         self.target_points = target_points
         self.features = features
+        
+        # Build local aircraft model database cache
+        self.ac_db = {}
+        try:
+            base_d = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            db_path = os.path.join(base_d, 'data', 'aircraft-database-complete-2025-08.csv')
+            if os.path.exists(db_path):
+                # Reading with quotechar to natively handle the OpenSky specific comma structure
+                df_db = pd.read_csv(db_path, quotechar="'", usecols=['icao24', 'typecode'], dtype=str)
+                # Ensure clean hashes (trim spaces, NaN to Unknown)
+                self.ac_db = dict(zip(df_db['icao24'].str.strip(), df_db['typecode'].fillna('Unknown')))
+        except Exception as e:
+            print(f"Warning: Aircraft Database not loaded. {e}")
 
     def compute_elapsed_time(self, flight_df):
         """Converts timestamp to zero-anchored elapsed time in seconds."""
@@ -85,10 +98,14 @@ class DatasetBuilder:
             processed_flights.append(tensor_slice)
             
             # Extract metadata for this flight
+            icao24 = df['icao24'].iloc[0] if 'icao24' in df.columns else 'Unknown'
+            # Look up typecode in local DB if available
+            typecode = self.ac_db.get(str(icao24).strip(), 'Unknown')
+            
             meta = {
                 'callsign': df['callsign'].iloc[0] if 'callsign' in df.columns else 'Unknown',
-                'typecode': df['typecode'].iloc[0] if 'typecode' in df.columns else 'Unknown',
-                'icao24': df['icao24'].iloc[0] if 'icao24' in df.columns else 'Unknown'
+                'typecode': typecode,
+                'icao24': icao24
             }
             if 'flight_id' in df.columns:
                 meta['flight_id'] = df['flight_id'].iloc[0]
