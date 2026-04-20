@@ -52,9 +52,9 @@ class DatasetBuilder:
         indices = np.linspace(0, len(df) - 1, self.target_points, dtype=int)
         return df.iloc[indices]
 
-    def has_holding_pattern(self, df, angle_threshold=720):
-        """Detects holding patterns via cumulative track angle changes."""
-        return df['track_unwrapped'].diff().sum() >= angle_threshold
+    def has_holding_pattern(self, df, angle_threshold=350):
+        """Detects holding patterns by checking the maximum continuous angular span."""
+        return (df['track_unwrapped'].max() - df['track_unwrapped'].min()) >= angle_threshold
 
     def filter_flights(self, traffic_data, airport_code="LSZH"):
         """Categorizes flights into nominal, go-arounds, and holds."""
