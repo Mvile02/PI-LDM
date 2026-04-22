@@ -86,22 +86,30 @@ def visualize_trajectories(X_filepath, meta_filepath, num_samples=3):
 if __name__ == "__main__":
     # --- CONFIGURATION AREA ---
     # The base name used in filter_data.py (without extension)
-    FILE_BASE = "LSZH_2019_R14_kinematic_200pts"
+    FILE_BASE = "LSZH_2019_R14_kinematic_200pts_spatial_5000m_c2"
     #FILE_BASE = "sample_trajectory_denoised"
     # --------------------------
 
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    X_file = os.path.join(base_dir, "data", "processed", f"{FILE_BASE}.npy")
-    meta_file = os.path.join(base_dir, "data", "processed", f"{FILE_BASE}.csv")
-
-    if not os.path.exists(X_file):
-        # Fallback to outputs/trajectories
-        X_file = os.path.join(base_dir, "outputs", "trajectories", f"{FILE_BASE}.npy")
-        meta_file = os.path.join(base_dir, "outputs", "trajectories", f"{FILE_BASE}.csv")
     
-    # Fallback for demo if the above doesn't exist yet
-    if not os.path.exists(X_file):
-        print("Such file does not exist")
+    # Define possible locations for the .npy file
+    search_paths = [
+        os.path.join(base_dir, "data", "processed", f"{FILE_BASE}.npy"),
+        os.path.join(base_dir, "data", "clusters", f"{FILE_BASE}.npy"),
+        os.path.join(base_dir, "outputs", "trajectories", f"{FILE_BASE}.npy"),
+        os.path.join(base_dir, "pi_ldm", "outputs", "trajectories", f"{FILE_BASE}.npy")
+    ]
+    
+    X_file = None
+    for path in search_paths:
+        if os.path.exists(path):
+            X_file = path
+            break
+            
+    if X_file is None:
+        print(f"Error: {FILE_BASE}.npy not found in any standard directories.")
+        
+    meta_file = X_file.replace('.npy', '.csv')
 
     visualize_trajectories(X_file, meta_file, num_samples=3)
 

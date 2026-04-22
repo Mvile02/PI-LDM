@@ -71,7 +71,7 @@ def compute_positions(X, meta, anchor_lat, anchor_lon):
 
 def main():
     # --- CONFIGURATION AREA ---
-    FILE_BASE = "LSZH_2019_R14_kinematic_200pts"
+    FILE_BASE = "LSZH_2019_R14_kinematic_200pts_spatial_5000m_c2"
     #FILE_BASE = "LSZH_2019_R14_kinematic_200pts_clust5_C2"
     AIRPORT_CODE = "LSZH"
     PLOT_MAP_BACKGROUND = False  # Set to True to overlay geographic map tiles (requires contextily)
@@ -80,39 +80,33 @@ def main():
     # Paths
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     
-    # Try multiple possible locations for the file
-    X_file_npz = os.path.join(base_dir, "data", "clusters", f"{FILE_BASE}.npz")
-    X_file_npy = os.path.join(base_dir, "data", "processed", f"{FILE_BASE}.npy")
-    meta_file = os.path.join(base_dir, "data", "processed", f"{FILE_BASE}.csv")
+    # Define possible locations for the .npy file
+    search_paths = [
+        os.path.join(base_dir, "data", "processed", f"{FILE_BASE}.npy"),
+        os.path.join(base_dir, "data", "clusters", f"{FILE_BASE}.npy"),
+        os.path.join(base_dir, "outputs", "trajectories", f"{FILE_BASE}.npy"),
+        os.path.join(base_dir, "pi_ldm", "outputs", "trajectories", f"{FILE_BASE}.npy")
+    ]
     
-    labels = None
-    if os.path.exists(X_file_npz):
-        print(f"Loading CLUSTERED data from: {X_file_npz}")
-        with np.load(X_file_npz, allow_pickle=True) as npz:
-            X = npz['X'].astype(np.float32)
-            if 'y' in npz:
-                labels = npz['y']
-                print(f"Detected {len(np.unique(labels))} cluster groups.")
-    elif os.path.exists(X_file_npy):
-        print(f"Loading data from: {X_file_npy}")
-        X = np.load(X_file_npy, allow_pickle=True).astype(np.float32)
-    else:
-        # Fallback to outputs/trajectories
-        X_file_npy = os.path.join(base_dir, "outputs", "trajectories", f"{FILE_BASE}.npy")
-        if os.path.exists(X_file_npy):
-            print(f"Loading fallback data from: {X_file_npy}")
-            # Fallback to pi_ldm/outputs/trajectories
-            X_file_pi_ldm = os.path.join(base_dir, "pi_ldm", "outputs", "trajectories", f"{FILE_BASE}.npy")
-            if os.path.exists(X_file_pi_ldm):
-                print(f"Loading PI-LDM data from: {X_file_pi_ldm}")
-                X_file_npy = X_file_pi_ldm
-                X = np.load(X_file_npy, allow_pickle=True).astype(np.float32)
-                meta_file = os.path.join(base_dir, "pi_ldm", "outputs", "trajectories", f"{FILE_BASE}.csv")
-            else:
-                print(f"Error: Neither .npz nor .npy file found for {FILE_BASE}")
-                return
+    X_file_npy = None
+    for path in search_paths:
+        if os.path.exists(path):
+            X_file_npy = path
+            break
+            
+    if X_file_npy is None:
+        print(f"Error: {FILE_BASE}.npy not found in any standard directories.")
+        return
+        
+    print(f"Loading data from: {X_file_npy}")
+    X = np.load(X_file_npy, allow_pickle=True).astype(np.float32)
     
-    # Metadata is now optional
+    labels = None # We are loading pure arrays now, not npz label structures
+    
+    # Attempt to locate corresponding metadata .csv in the exact same folder
+    meta_file = X_file_npy.replace('.npy', '.csv')
+    
+    # Metadata is optional
     meta = None
     if os.path.exists(meta_file):
         meta = pd.read_csv(meta_file)

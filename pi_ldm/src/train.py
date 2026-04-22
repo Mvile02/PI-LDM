@@ -107,9 +107,17 @@ def main():
     trainer = PILDMTrainer()
     
     print("Starting Training Loop...")
-    for epoch in range(500):
+    max_epochs = 20000  # High safe fail limit
+    patience = 50       # Number of epochs to wait for improvement
+    min_delta = 1e-5    # Minimum improvement required
+    
+    best_loss = float('inf')
+    early_stop_counter = 0
+    
+    for epoch in range(max_epochs):
         epoch_diff = 0
         epoch_phys = 0
+        
         for batch_idx, (x_0, cond) in enumerate(train_loader):
             x_0 = x_0.to(trainer.device)
             cond = cond.to(trainer.device)
@@ -118,7 +126,23 @@ def main():
             epoch_diff += l_diff
             epoch_phys += l_phys
             
-        print(f"Epoch {epoch:02d} | Diff Loss: {epoch_diff/max(1, len(train_loader)):.4f} | Phys Loss: {epoch_phys/max(1, len(train_loader)):.4f}")
+        avg_diff = epoch_diff / max(1, len(train_loader))
+        avg_phys = epoch_phys / max(1, len(train_loader))
+        avg_total = avg_diff + trainer.lambda_physics * avg_phys
+            
+        print(f"Epoch {epoch:04d} | Total: {avg_total:.5f} | Diff: {avg_diff:.5f} | Phys: {avg_phys:.5f}")
+        
+        # Convergence Check (Early Stopping)
+        if best_loss - avg_total > min_delta:
+            best_loss = avg_total
+            early_stop_counter = 0
+            # Could save best model weights here if desired
+        else:
+            early_stop_counter += 1
+            if early_stop_counter >= patience:
+                print(f"\nConvergence reached! Early stopping triggered at epoch {epoch}.")
+                print(f"Loss has not improved by more than {min_delta} for {patience} consecutive epochs.")
+                break
 
     # Explicitly save model to subdirectory
     models_dir = os.path.join(base_dir, "pi_ldm", "models")
