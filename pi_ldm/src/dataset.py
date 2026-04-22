@@ -67,6 +67,9 @@ class AircraftTrajectoryDataset(Dataset):
         
         # Conditioning: Encode categorical constraints
         # 1. Runway / Airport (A)
+        if 'airport' not in self.meta.columns:
+            self.meta['airport'] = 'LSZH'
+            
         self.le_airport = LabelEncoder()
         airport_idx = self.le_airport.fit_transform(self.meta['airport'].astype(str))
         
