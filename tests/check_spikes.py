@@ -2,7 +2,7 @@ import numpy as np
 import os
 
 base_dir = r"c:\Users\usuario\Desktop\Delft\TFM\Code"
-npy_file = os.path.join(base_dir, "data", "processed", "X_LSZH_2026-03-01_1000_to_2026-03-01_1200_runway14.npy")
+npy_file = os.path.join(base_dir, "data", "clusters", "LSZH_2019_R14_kinematic_200pts_spatial_5000m_c1.npy")
 
 if not os.path.exists(npy_file):
     print(f"File not found: {npy_file}")

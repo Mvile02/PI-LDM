@@ -11,9 +11,24 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import math
+import glob
 from pi_ldm.src.model import ConditionalUNet1D
 from pi_ldm.src.physics import PhysicsLoss
 from pi_ldm.src.dataset import get_dataloaders
+
+# --- Colab / Drive Setup ---
+IN_COLAB = 'google.colab' in sys.modules
+
+def mount_drive():
+    if IN_COLAB:
+        from google.colab import drive
+        drive.mount('/content/drive')
+        return "/content/drive/My Drive/TFM"
+    return os.getcwd()
+
+BASE_DIR = mount_drive()
+MODELS_DIR = os.path.join(BASE_DIR, "models")
+os.makedirs(MODELS_DIR, exist_ok=True)
 
 class PILDMTrainer:
     def __init__(self, 
@@ -44,6 +59,32 @@ class PILDMTrainer:
         
         self.optimizer = optim.Adam(self.model.parameters(), lr=1e-4)
         self.mse_loss = nn.MSELoss()
+
+    def save_checkpoint(self, epoch, loss, filename="checkpoint_latest.pth"):
+        """Save model and optimizer state"""
+        checkpoint = {
+            'epoch': epoch,
+            'model_state_dict': self.model.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+            'loss': loss,
+        }
+        path = os.path.join(MODELS_DIR, filename)
+        torch.save(checkpoint, path)
+        # Also save a numbered checkpoint occasionally
+        if epoch % 500 == 0:
+            torch.save(checkpoint, os.path.join(MODELS_DIR, f"checkpoint_epoch_{epoch:05d}.pth"))
+        print(f"--> Checkpoint saved: {path}")
+
+    def load_checkpoint(self, filename="checkpoint_latest.pth"):
+        """Load model and optimizer state if it exists"""
+        path = os.path.join(MODELS_DIR, filename)
+        if os.path.exists(path):
+            print(f"--> Loading checkpoint: {path}")
+            checkpoint = torch.load(path, map_location=self.device)
+            self.model.load_state_dict(checkpoint['model_state_dict'])
+            self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            return checkpoint['epoch'], checkpoint['loss']
+        return 0, float('inf')
 
     def add_noise(self, x_0, t):
         """Forward diffusion process q(x_t | x_0)"""
@@ -99,22 +140,25 @@ def main():
     # Use current working directory as base
     base_dir = os.getcwd()
     data_dir = os.path.join(base_dir, "data", "processed")
-    FILE_BASE = "LSZH_2019_R14_kinematic_200pts_clust5_C2"
+    FILE_BASE = "LSZH_2019_R14_kinematic_200pts_spatial_5000m_c1"
     
     # Load all available files
     train_loader, _ = get_dataloaders(data_dir, batch_size=32, file_base=FILE_BASE)
     
     trainer = PILDMTrainer()
     
-    print("Starting Training Loop...")
-    max_epochs = 20000  # High safe fail limit
-    patience = 50       # Number of epochs to wait for improvement
-    min_delta = 1e-5    # Minimum improvement required
+    # --- Resume Training ---
+    start_epoch, best_loss = trainer.load_checkpoint()
     
-    best_loss = float('inf')
+    print(f"Starting Training Loop from epoch {start_epoch}...")
+    max_epochs = 20000  
+    patience = 100       # Increased patience for long runs
+    min_delta = 1e-5    
+    
     early_stop_counter = 0
+    checkpoint_interval = 50 # Save every 50 epochs
     
-    for epoch in range(max_epochs):
+    for epoch in range(start_epoch, max_epochs):
         epoch_diff = 0
         epoch_phys = 0
         
@@ -144,12 +188,14 @@ def main():
                 print(f"Loss has not improved by more than {min_delta} for {patience} consecutive epochs.")
                 break
 
-    # Explicitly save model to subdirectory
-    models_dir = os.path.join(base_dir, "pi_ldm", "models")
-    os.makedirs(models_dir, exist_ok=True)
-    output_path = os.path.join(models_dir, "test_model.pth")
+        # Checkpoint Saving
+        if epoch % checkpoint_interval == 0:
+            trainer.save_checkpoint(epoch, avg_total)
+
+    # Final Save
+    output_path = os.path.join(MODELS_DIR, "final_model.pth")
     torch.save(trainer.model.state_dict(), output_path)
-    print(f"Model saved to {output_path}")
+    print(f"Final model saved to {output_path}")
 
 if __name__ == "__main__":
     main()

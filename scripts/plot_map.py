@@ -71,7 +71,7 @@ def compute_positions(X, meta, anchor_lat, anchor_lon):
 
 def main():
     # --- CONFIGURATION AREA ---
-    FILE_BASE = "LSZH_2019_R14_kinematic_200pts_spatial_5000m_c2"
+    FILE_BASE = "synthetic_cluster_trajectories"
     #FILE_BASE = "LSZH_2019_R14_kinematic_200pts_clust5_C2"
     AIRPORT_CODE = "LSZH"
     PLOT_MAP_BACKGROUND = False  # Set to True to overlay geographic map tiles (requires contextily)

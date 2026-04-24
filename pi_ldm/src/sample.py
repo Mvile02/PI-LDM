@@ -14,6 +14,22 @@ from pi_ldm.src.model import ConditionalUNet1D
 from pi_ldm.src.physics import PhysicsLoss
 from pi_ldm.src.dataset import AircraftTrajectoryDataset
 
+# --- Colab / Drive Setup ---
+IN_COLAB = 'google.colab' in sys.modules
+
+def mount_drive():
+    if IN_COLAB:
+        from google.colab import drive
+        drive.mount('/content/drive')
+        return "/content/drive/My Drive/TFM"
+    return os.getcwd()
+
+BASE_DIR = mount_drive()
+MODELS_DIR = os.path.join(BASE_DIR, "models")
+OUTPUTS_DIR = os.path.join(BASE_DIR, "outputs", "trajectories")
+os.makedirs(MODELS_DIR, exist_ok=True)
+os.makedirs(OUTPUTS_DIR, exist_ok=True)
+
 class PILDMSampler:
     """
     Implements Online Sampling (Inference) via Guided SDE.
@@ -107,23 +123,26 @@ class PILDMSampler:
 def main():
     print("Initializing sampler...")
     # Look for model in root
-    base_dir = os.getcwd()
-    model_path = os.path.join(base_dir, "pi_ldm", "models", "test_model_denoised.pth")
-    save_file = "sample_trajectory_denoised"
+    model_path = os.path.join(MODELS_DIR, "final_model.pth")
+    # Fallback to checkpoint if final doesn't exist
+    if not os.path.exists(model_path):
+        model_path = os.path.join(MODELS_DIR, "checkpoint_latest.pth")
+        
+    save_file = "synthetic_cluster_trajectories"
     
     sampler = PILDMSampler(model_path=model_path)
     
-    # Generate x trajectories for a single condition (e.g., Runway/Airport 1, Type 0.5, Weather 0)
+    # Generate x trajectories for a single condition (e.g., Airport: LSZH (0), Type: A320 (0), Weather: 0)
     num_samples = 30
-    cond = torch.tensor([[1.0, 0.5, 0.0]], device=sampler.device).repeat(num_samples, 1)
+    cond = torch.tensor([[0.0, 0.0, 0.0]], device=sampler.device).repeat(num_samples, 1)
     
     print(f"Generating {num_samples} trajectories without physics guidance...")
     trajectories = sampler.sample(cond, enable_guidance=False)
     print("Generated shape:", trajectories.shape)
 
     # Save the generated trajectories
-    output_dir = os.path.join(base_dir, "pi_ldm", "outputs", "trajectories")
-    os.makedirs(output_dir, exist_ok=True)
+    # output_dir = os.path.join(base_dir, "pi_ldm", "outputs", "trajectories") # Old path
+    output_dir = OUTPUTS_DIR
     
     # Convert to numpy and save
     traj_np = trajectories.detach().cpu().numpy()

@@ -55,9 +55,9 @@ class ResidualBlock1D(nn.Module):
 
 class ConditionalUNet1D(nn.Module):
     """
-    1D U-Net Denoiser with FiLM conditioning at every layer.
+    1D U-Net Denoiser with FiLM conditioning and absolute positional awareness.
     """
-    def __init__(self, state_dim, cond_dim, time_emb_dim=64, hidden_dims=[128, 256, 512]):
+    def __init__(self, state_dim, cond_dim, time_emb_dim=128, hidden_dims=[64, 128, 256, 512]):
         super().__init__()
         self.time_mlp = nn.Sequential(
             SinusoidalPositionEmbeddings(time_emb_dim),
@@ -73,17 +73,20 @@ class ConditionalUNet1D(nn.Module):
         )
 
         # Encoder (Downsampling path)
-        self.enc1 = ResidualBlock1D(state_dim, hidden_dims[0], time_emb_dim)
+        # We add +1 to state_dim to inject sequence positional encoding (linspace)
+        self.enc1 = ResidualBlock1D(state_dim + 1, hidden_dims[0], time_emb_dim)
         self.enc2 = ResidualBlock1D(hidden_dims[0], hidden_dims[1], time_emb_dim)
+        self.enc3 = ResidualBlock1D(hidden_dims[1], hidden_dims[2], time_emb_dim)
         self.down = nn.MaxPool1d(2)
         
         # Bottleneck
-        self.bottleneck = ResidualBlock1D(hidden_dims[1], hidden_dims[2], time_emb_dim)
+        self.bottleneck = ResidualBlock1D(hidden_dims[2], hidden_dims[3], time_emb_dim)
         
         # Decoder (Upsampling path with skip connections)
         self.up = nn.Upsample(scale_factor=2, mode='linear', align_corners=False)
-        self.dec1 = ResidualBlock1D(hidden_dims[2] + hidden_dims[1], hidden_dims[1], time_emb_dim)
-        self.dec2 = ResidualBlock1D(hidden_dims[1] + hidden_dims[0], hidden_dims[0], time_emb_dim)
+        self.dec1 = ResidualBlock1D(hidden_dims[3] + hidden_dims[2], hidden_dims[2], time_emb_dim)
+        self.dec2 = ResidualBlock1D(hidden_dims[2] + hidden_dims[1], hidden_dims[1], time_emb_dim)
+        self.dec3 = ResidualBlock1D(hidden_dims[1] + hidden_dims[0], hidden_dims[0], time_emb_dim)
         
         # Final output projection
         self.final_conv = nn.Conv1d(hidden_dims[0], state_dim, kernel_size=1)
@@ -94,25 +97,41 @@ class ConditionalUNet1D(nn.Module):
         time: (batch,)
         cond: (batch, cond_dim)
         """
+        # Inject sequence absolute positional encoding coordinate axis
+        # Crucial for 1D trajectory diffusion to map global descent structures
+        seq_len = x.shape[-1]
+        device = x.device
+        pos = torch.linspace(-1.0, 1.0, seq_len, device=device).unsqueeze(0).unsqueeze(0)
+        pos = pos.expand(x.shape[0], 1, seq_len)
+        x_in = torch.cat([x, pos], dim=1)
+        
         # Embed time and condition
         t_emb = self.time_mlp(time)
         c_emb = self.cond_mlp(cond)
-        emb = t_emb + c_emb # (batch, time_emb_dim)
+        emb = t_emb + c_emb 
         
         # Encoding
-        x1 = self.enc1(x, emb)             # (B, hidden_dims[0], L)
-        x2 = self.enc2(x1, emb)            # (B, hidden_dims[1], L)
-        x_low = self.down(x2)              # (B, hidden_dims[1], L/2)
+        x1 = self.enc1(x_in, emb)      # L
+        x1_down = self.down(x1)        # L/2
+        
+        x2 = self.enc2(x1_down, emb)   # L/2
+        x2_down = self.down(x2)        # L/4
+        
+        x3 = self.enc3(x2_down, emb)   # L/4
+        x3_down = self.down(x3)        # L/8
         
         # Bottleneck
-        x_btn = self.bottleneck(x_low, emb) # (B, hidden_dims[2], L/2)
+        x_btn = self.bottleneck(x3_down, emb) # L/8
         
         # Decoding
-        x_up = self.up(x_btn)              # (B, hidden_dims[2], L)
+        x_up3 = self.up(x_btn)                       # L/4
+        x_dec1 = self.dec1(torch.cat([x_up3, x3], dim=1), emb) # L/4
         
-        # Skip connection: concat along channel dimension
-        x_dec1 = self.dec1(torch.cat([x_up, x2], dim=1), emb) # (B, hidden_dims[1], L)
-        x_dec2 = self.dec2(torch.cat([x_dec1, x1], dim=1), emb) # (B, hidden_dims[0], L)
+        x_up2 = self.up(x_dec1)                      # L/2
+        x_dec2 = self.dec2(torch.cat([x_up2, x2], dim=1), emb) # L/2
         
-        out = self.final_conv(x_dec2)
+        x_up1 = self.up(x_dec2)                      # L
+        x_dec3 = self.dec3(torch.cat([x_up1, x1], dim=1), emb) # L
+        
+        out = self.final_conv(x_dec3)
         return out

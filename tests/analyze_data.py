@@ -1,7 +1,7 @@
 import numpy as np
 import os
 
-path = r'c:\Users\usuario\Desktop\Delft\TFM\Code\data\processed\X_LSZH_2026-03-01_1000_to_2026-03-01_1200_runway14.npy'
+path = r'c:\Users\usuario\Desktop\Delft\TFM\Code\data\clusters\LSZH_2019_R14_kinematic_200pts_spatial_5000m_c1.npy'
 if os.path.exists(path):
     data = np.load(path)
     print('Shape:', data.shape)
