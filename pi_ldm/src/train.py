@@ -23,11 +23,16 @@ def mount_drive():
     if IN_COLAB:
         from google.colab import drive
         drive.mount('/content/drive')
-        return "/content/drive/My Drive/TFM"
+        return "/content/drive/MyDrive/TFM"
     return os.getcwd()
 
 BASE_DIR = mount_drive()
-MODELS_DIR = os.path.join(BASE_DIR, "models")
+if IN_COLAB:
+    MODELS_DIR = os.path.join(BASE_DIR, "models")
+else:
+    # Use the local project structure
+    MODELS_DIR = os.path.join(os.getcwd(), "pi_ldm", "models")
+
 os.makedirs(MODELS_DIR, exist_ok=True)
 
 class PILDMTrainer:
