@@ -21,12 +21,18 @@ def mount_drive():
     if IN_COLAB:
         from google.colab import drive
         drive.mount('/content/drive')
-        return "/content/drive/My Drive/TFM"
+        return "/content/drive/MyDrive/TFM"
     return os.getcwd()
 
 BASE_DIR = mount_drive()
-MODELS_DIR = os.path.join(BASE_DIR, "models")
-OUTPUTS_DIR = os.path.join(BASE_DIR, "outputs", "trajectories")
+if IN_COLAB:
+    MODELS_DIR = os.path.join(BASE_DIR, "models")
+    OUTPUTS_DIR = os.path.join(BASE_DIR, "outputs", "trajectories")
+else:
+    # Use project root structure
+    MODELS_DIR = os.path.join(project_root, "pi_ldm", "models")
+    OUTPUTS_DIR = os.path.join(project_root, "pi_ldm", "outputs", "trajectories")
+
 os.makedirs(MODELS_DIR, exist_ok=True)
 os.makedirs(OUTPUTS_DIR, exist_ok=True)
 

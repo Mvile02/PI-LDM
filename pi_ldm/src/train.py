@@ -23,11 +23,16 @@ def mount_drive():
     if IN_COLAB:
         from google.colab import drive
         drive.mount('/content/drive')
-        return "/content/drive/My Drive/TFM"
+        return "/content/drive/MyDrive/TFM"
     return os.getcwd()
 
 BASE_DIR = mount_drive()
-MODELS_DIR = os.path.join(BASE_DIR, "models")
+if IN_COLAB:
+    MODELS_DIR = os.path.join(BASE_DIR, "models")
+else:
+    # Use the project root structure (independent of execution directory)
+    MODELS_DIR = os.path.join(project_root, "pi_ldm", "models")
+
 os.makedirs(MODELS_DIR, exist_ok=True)
 
 class PILDMTrainer:
@@ -137,9 +142,8 @@ class PILDMTrainer:
         return loss_diff.item(), loss_physics.item(), loss_total.item()
 
 def main():
-    # Use current working directory as base
-    base_dir = os.getcwd()
-    data_dir = os.path.join(base_dir, "data", "processed")
+    # Use project root to ensure data is found correctly
+    data_dir = os.path.join(project_root, "data", "processed")
     FILE_BASE = "LSZH_2019_R14_kinematic_200pts_spatial_5000m_c1"
     
     # Load all available files
