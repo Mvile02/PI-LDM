@@ -53,9 +53,11 @@ class PILDMTrainer:
                  timesteps=1000, 
                  beta_start=1e-4, 
                  beta_end=0.02,
-                 device='cuda' if torch.cuda.is_available() else 'cpu'):
+                 device='cuda' if torch.cuda.is_available() else 'cpu',
+                 run_name="default_run"):
         
         self.device = device
+        self.run_name = run_name
         self.timesteps = timesteps
         
         # Diffusion schedules
@@ -77,8 +79,10 @@ class PILDMTrainer:
         self.optimizer = optim.Adam(self.model.parameters(), lr=1e-4)
         self.mse_loss = nn.MSELoss()
 
-    def save_checkpoint(self, epoch, loss, filename="checkpoint_latest.pth"):
+    def save_checkpoint(self, epoch, loss, filename=None):
         """Save model and optimizer state"""
+        if filename is None:
+            filename = f"{self.run_name}_checkpoint_latest.pth"
         checkpoint = {
             'epoch': epoch,
             'model_state_dict': self.model.state_dict(),
@@ -89,11 +93,13 @@ class PILDMTrainer:
         torch.save(checkpoint, path)
         # Also save a numbered checkpoint occasionally
         if epoch % 500 == 0:
-            torch.save(checkpoint, os.path.join(MODELS_DIR, f"checkpoint_epoch_{epoch:05d}.pth"))
+            torch.save(checkpoint, os.path.join(MODELS_DIR, f"{self.run_name}_checkpoint_epoch_{epoch:05d}.pth"))
         print(f"--> Checkpoint saved: {path}")
 
-    def load_checkpoint(self, filename="checkpoint_latest.pth"):
+    def load_checkpoint(self, filename=None):
         """Load model and optimizer state if it exists"""
+        if filename is None:
+            filename = f"{self.run_name}_checkpoint_latest.pth"
         path = os.path.join(MODELS_DIR, filename)
         if os.path.exists(path):
             print(f"--> Loading checkpoint: {path}")
@@ -166,7 +172,7 @@ def main():
     # Load all available files
     train_loader, _ = get_dataloaders(data_dir, batch_size=32, file_base=FILE_BASE)
     
-    trainer = PILDMTrainer()
+    trainer = PILDMTrainer(run_name=FILE_BASE)
     
     # --- Resume Training ---
     start_epoch, best_loss = trainer.load_checkpoint()
@@ -212,7 +218,7 @@ def main():
             trainer.save_checkpoint(epoch, avg_total)
 
     # Final Save
-    output_path = os.path.join(MODELS_DIR, "final_model.pth")
+    output_path = os.path.join(MODELS_DIR, f"{FILE_BASE}_final_model.pth")
     torch.save(trainer.model.state_dict(), output_path)
     print(f"Final model saved to {output_path}")
 
