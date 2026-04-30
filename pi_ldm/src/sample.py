@@ -145,19 +145,20 @@ class PILDMSampler:
         return x_final
 
 def main():
+    FILE_BASE = "LSZH_2019_R14_kinematic_200pts_spatial_5000m_c1"
+
     print("Initializing sampler...")
     # Look for model in root
-    model_path = os.path.join(MODELS_DIR, "final_model.pth")
+    model_path = os.path.join(MODELS_DIR, f"{FILE_BASE}_final_model.pth")
     # Fallback to checkpoint if final doesn't exist
     if not os.path.exists(model_path):
-        model_path = os.path.join(MODELS_DIR, "checkpoint_latest.pth")
-        
-    save_file = "synthetic_cluster_trajectories"
+        model_path = os.path.join(MODELS_DIR, f"{FILE_BASE}_checkpoint_latest.pth")
     
     sampler = PILDMSampler(model_path=model_path)
     
     # Generate x trajectories for a single condition (e.g., Airport: LSZH (0), Type: A320 (0), Weather: 0)
-    num_samples = 30
+    num_samples = 1000
+    save_file = f"{FILE_BASE}_synthetic_{num_samples}"
     cond = torch.tensor([[0.0, 0.0, 0.0]], device=sampler.device).repeat(num_samples, 1)
     
     print(f"Generating {num_samples} trajectories...")

@@ -86,7 +86,7 @@ def visualize_trajectories(X_filepath, meta_filepath, num_samples=3):
 if __name__ == "__main__":
     # --- CONFIGURATION AREA ---
     # The base name used in filter_data.py (without extension)
-    FILE_BASE = "synthetic_cluster_trajectories"
+    FILE_BASE = "LSZH_2019_R14_kinematic_200pts_spatial_5000m_c1_synthetic_trajectories"
     #FILE_BASE = "sample_trajectory_denoised"
     # --------------------------
 
