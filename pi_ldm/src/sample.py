@@ -15,14 +15,24 @@ from pi_ldm.src.physics import PhysicsLoss
 from pi_ldm.src.dataset import AircraftTrajectoryDataset
 
 # --- Colab / Drive Setup ---
-IN_COLAB = 'google.colab' in sys.modules
+try:
+    import google.colab
+    IN_COLAB = True
+except ImportError:
+    IN_COLAB = False
 
 def mount_drive():
     if IN_COLAB:
-        from google.colab import drive
-        drive.mount('/content/drive')
-        return "/content/drive/MyDrive/TFM"
-    return os.getcwd()
+        print("--> Environment detected: Google Colab")
+        # Drive must be mounted manually in a Colab cell before running this script
+        path = "/content/drive/MyDrive/TFM"
+        if not os.path.exists(path):
+             print(f"!! WARNING: Path not found in Drive: {path}")
+             print("!! Ensure you have mounted Drive in a cell and the path exists.")
+        return path
+    else:
+        print("--> Environment detected: Local PC")
+        return os.getcwd()
 
 BASE_DIR = mount_drive()
 if IN_COLAB:
@@ -35,6 +45,8 @@ else:
 
 os.makedirs(MODELS_DIR, exist_ok=True)
 os.makedirs(OUTPUTS_DIR, exist_ok=True)
+print(f"--> Models will be loaded from: {MODELS_DIR}")
+print(f"--> Outputs will be saved to: {OUTPUTS_DIR}")
 
 class PILDMSampler:
     """
@@ -49,7 +61,11 @@ class PILDMSampler:
         self.timesteps = timesteps
         
         self.model = ConditionalUNet1D(state_dim=state_dim, cond_dim=cond_dim).to(device)
-        self.physics_fn = PhysicsLoss().to(device)
+        
+        # Physics Guidance (Disabled by default)
+        self.enable_physics = False
+        if self.enable_physics:
+            self.physics_fn = PhysicsLoss().to(device)
         
         if model_path and os.path.exists(model_path):
             self.model.load_state_dict(torch.load(model_path, map_location=device))
@@ -70,6 +86,8 @@ class PILDMSampler:
         Phi(z): Calculates exactly the Distance to Feasibility.
         Uses the Physics Loss as the penalty landscape.
         """
+        if getattr(self, 'physics_fn', None) is None:
+            return torch.tensor(0.0, device=self.device)
         # x is in normalized space [-1, 1]. Denormalize for physics calculation.
         x_phys = AircraftTrajectoryDataset.denormalize(x)
         trajectories = x_phys.transpose(1, 2)
@@ -78,9 +96,9 @@ class PILDMSampler:
         return phi
 
     @torch.no_grad()
-    def sample(self, cond, eta=0.01, enable_guidance=True):
+    def sample(self, cond, eta=0.01, enable_guidance=False):
         """
-        Generates trajectories via denoising loop with Physics Guidance Term.
+        Generates trajectories via denoising loop (Standard DDPM or Guided).
         cond: (batch, cond_dim)
         """
         batch_size = cond.shape[0]
@@ -94,7 +112,7 @@ class PILDMSampler:
             pred_noise = self.model(x_t, time_tensor, cond)
             
             # Physics Guidance Step
-            if enable_guidance:
+            if enable_guidance and self.enable_physics:
                 with torch.enable_grad():
                     x_t_grad = x_t.clone().detach().requires_grad_(True)
                     # We compute the potential on the predicted x0
@@ -111,13 +129,13 @@ class PILDMSampler:
             else:
                 guidance = 0.0
 
-            # Denoising step (Simplified DDPM / Euler-Maruyama step)
+            # Denoising step (Standard DDPM / Euler-Maruyama)
             alpha_t = self.alpha[t_idx]
             alpha_hat_t = self.alpha_hat[t_idx]
             
             z = torch.randn_like(x_t) if t_idx > 0 else 0.0
             
-            # Update step including the guidance
+            # Update step
             x_t = (1 / math.sqrt(alpha_t)) * (x_t - pred_noise * (1 - alpha_t) / math.sqrt(1 - alpha_hat_t)) \
                   - guidance \
                   + math.sqrt(self.beta[t_idx]) * z
@@ -142,8 +160,8 @@ def main():
     num_samples = 30
     cond = torch.tensor([[0.0, 0.0, 0.0]], device=sampler.device).repeat(num_samples, 1)
     
-    print(f"Generating {num_samples} trajectories without physics guidance...")
-    trajectories = sampler.sample(cond, enable_guidance=False)
+    print(f"Generating {num_samples} trajectories...")
+    trajectories = sampler.sample(cond)
     print("Generated shape:", trajectories.shape)
 
     # Save the generated trajectories

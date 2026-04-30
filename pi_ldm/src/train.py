@@ -17,14 +17,24 @@ from pi_ldm.src.physics import PhysicsLoss
 from pi_ldm.src.dataset import get_dataloaders
 
 # --- Colab / Drive Setup ---
-IN_COLAB = 'google.colab' in sys.modules
+try:
+    import google.colab
+    IN_COLAB = True
+except ImportError:
+    IN_COLAB = False
 
 def mount_drive():
     if IN_COLAB:
-        from google.colab import drive
-        drive.mount('/content/drive')
-        return "/content/drive/MyDrive/TFM"
-    return os.getcwd()
+        print("--> Environment detected: Google Colab")
+        # Drive must be mounted manually in a Colab cell before running this script
+        path = "/content/drive/MyDrive/TFM"
+        if not os.path.exists(path):
+             print(f"!! WARNING: Path not found in Drive: {path}")
+             print("!! Ensure you have mounted Drive in a cell and the path exists.")
+        return path
+    else:
+        print("--> Environment detected: Local PC")
+        return os.getcwd()
 
 BASE_DIR = mount_drive()
 if IN_COLAB:
@@ -34,6 +44,7 @@ else:
     MODELS_DIR = os.path.join(project_root, "pi_ldm", "models")
 
 os.makedirs(MODELS_DIR, exist_ok=True)
+print(f"--> Models will be saved to: {MODELS_DIR}")
 
 class PILDMTrainer:
     def __init__(self, 
@@ -52,15 +63,16 @@ class PILDMTrainer:
         self.alpha = 1. - self.beta
         self.alpha_hat = torch.cumprod(self.alpha, dim=0)
         
-        # Model & Physics
+        # Model
         self.model = ConditionalUNet1D(state_dim=state_dim, cond_dim=cond_dim).to(device)
-        self.physics_loss_fn = PhysicsLoss(dt=1.0, gamma1=1.0, gamma2=1.0, gamma3=1.0).to(device)
         
-        # Weights for the physics-informed penalties
-        self.lambda_physics = 0.1 
-        self.lambda2_physics = 0.1
-        self.lambda3_physics = 0.1
-
+        # Physics (Disabled by default, kept for future use)
+        self.enable_physics = False
+        if self.enable_physics:
+            self.physics_loss_fn = PhysicsLoss(dt=1.0, gamma1=1.0, gamma2=1.0, gamma3=1.0).to(device)
+            self.lambda_physics = 0.1 
+            self.lambda2_physics = 0.1
+            self.lambda3_physics = 0.1
         
         self.optimizer = optim.Adam(self.model.parameters(), lr=1e-4)
         self.mse_loss = nn.MSELoss()
@@ -104,6 +116,7 @@ class PILDMTrainer:
         x0_hat = (x_t - torch.sqrt(1 - alpha_hat_t) * pred_noise) / torch.sqrt(alpha_hat_t)
         return x0_hat
 
+
     def train_step(self, x_0, cond):
         self.optimizer.zero_grad()
         batch_size = x_0.shape[0]
@@ -120,26 +133,30 @@ class PILDMTrainer:
         # 4. Standard Diffusion Loss
         loss_diff = self.mse_loss(pred_noise, true_noise)
         
-        # 5. Physics-Informed Loss
-        # We need the predicted trajectory x0_hat in physical space to compute physics loss
-        x0_hat = self.predict_x0(x_t, t, pred_noise)
-        
-        # Denormalize to physical units before computing physics loss
-        from pi_ldm.src.dataset import AircraftTrajectoryDataset
-        x0_phys = AircraftTrajectoryDataset.denormalize(x0_hat)
-        
-        # Transpose from (batch, state_dim, seq_len) to (batch, seq_len, state_dim)
-        trajectories = x0_phys.transpose(1, 2)
-        
-        loss_physics = self.physics_loss_fn(trajectories)
-        
-        # 6. Total Loss
-        loss_total = loss_diff + self.lambda_physics * loss_physics
+        # 5. Physics-Informed Loss (Optional)
+        loss_physics = torch.tensor(0.0, device=self.device)
+        if self.enable_physics:
+            # We need the predicted trajectory x0_hat in physical space to compute physics loss
+            x0_hat = self.predict_x0(x_t, t, pred_noise)
+            
+            # Denormalize to physical units before computing physics loss
+            from pi_ldm.src.dataset import AircraftTrajectoryDataset
+            x0_phys = AircraftTrajectoryDataset.denormalize(x0_hat)
+            
+            # Transpose from (batch, state_dim, seq_len) to (batch, seq_len, state_dim)
+            trajectories = x0_phys.transpose(1, 2)
+            
+            loss_physics = self.physics_loss_fn(trajectories)
+            loss_total = loss_diff + self.lambda_physics * loss_physics
+        else:
+            # Total Loss (Standard Diffusion Only)
+            loss_total = loss_diff
+
         
         loss_total.backward()
         self.optimizer.step()
         
-        return loss_diff.item(), loss_physics.item(), loss_total.item()
+        return loss_diff.item(), loss_total.item()
 
 def main():
     # Use project root to ensure data is found correctly
@@ -170,15 +187,13 @@ def main():
             x_0 = x_0.to(trainer.device)
             cond = cond.to(trainer.device)
             
-            l_diff, l_phys, l_tot = trainer.train_step(x_0, cond)
+            l_diff, l_tot = trainer.train_step(x_0, cond)
             epoch_diff += l_diff
-            epoch_phys += l_phys
             
         avg_diff = epoch_diff / max(1, len(train_loader))
-        avg_phys = epoch_phys / max(1, len(train_loader))
-        avg_total = avg_diff + trainer.lambda_physics * avg_phys
+        avg_total = avg_diff # Add logic here if tracking phys
             
-        print(f"Epoch {epoch:04d} | Total: {avg_total:.5f} | Diff: {avg_diff:.5f} | Phys: {avg_phys:.5f}")
+        print(f"Epoch {epoch:04d} | Total: {avg_total:.5f} | Diff: {avg_diff:.5f}")
         
         # Convergence Check (Early Stopping)
         if best_loss - avg_total > min_delta:
