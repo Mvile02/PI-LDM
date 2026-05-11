@@ -158,7 +158,7 @@ def main():
     
     # Generate x trajectories for a single condition (e.g., Airport: LSZH (0), Type: A320 (0), Weather: 0)
     num_samples = 1000
-    save_file = f"{FILE_BASE}_synthetic_{num_samples}"
+    save_file = f"{FILE_BASE}_synthetic_{num_samples}t"
     cond = torch.tensor([[0.0, 0.0, 0.0]], device=sampler.device).repeat(num_samples, 1)
     
     print(f"Generating {num_samples} trajectories...")
