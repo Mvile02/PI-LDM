@@ -203,7 +203,7 @@ class PhysicsLoss(nn.Module):
             
             # Time differences
             dt = t[1:] - t[:-1]
-            dt = torch.clamp(dt, min=0.1)
+            dt = torch.clamp(dt, min=0.1, max=10000.0)
             
             # Compute physical derivatives
             dh = h[1:] - h[:-1]
@@ -214,12 +214,12 @@ class PhysicsLoss(nn.Module):
             dpsi = torch.atan2(torch.sin(dpsi), torch.cos(dpsi))
             
             roc = dh / dt       # Rate of climb/descent (m/s)
-            acc = dv / dt       # Acceleration (m/s^2)
+            acc = torch.clamp(dv / dt, min=-100.0, max=100.0)  # Acceleration (m/s^2)
             omega = dpsi / dt   # Heading change rate (rad/s)
             
             # Midpoint states for forces and density calculations
-            v_mid = torch.clamp(0.5 * (v_tas[1:] + v_tas[:-1]), min=5.0)
-            h_mid = torch.clamp(0.5 * (h[1:] + h[:-1]), min=0.0)
+            v_mid = torch.clamp(0.5 * (v_tas[1:] + v_tas[:-1]), min=5.0, max=1000.0)
+            h_mid = torch.clamp(0.5 * (h[1:] + h[:-1]), min=0.0, max=30000.0)
             
             # 2. Dynamic Atmosphere
             p, rho, T = compute_atmos_torch(h_mid)
@@ -240,7 +240,7 @@ class PhysicsLoss(nn.Module):
             # 4. Engine Climb Thrust Limits (Differentiable Segment Model)
             tas_kt = v_mid / 0.514444
             alt_ft = h_mid / 0.3048
-            roc_fpm = roc / 0.00508
+            roc_fpm = torch.clamp(roc / 0.00508, min=-20000.0, max=20000.0)
             roc_abs = torch.abs(roc_fpm)
             
             Fcr = props['eng_cruise_thrust'] * props['eng_number']
@@ -252,11 +252,11 @@ class PhysicsLoss(nn.Module):
             v_tas_ref_mps = cruise_mach * torch.sqrt(1.4 * 287.05287 * T_cr)
             vcas_ref = tas2cas_torch(v_tas_ref_mps, p_cr, rho_cr)
             
-            mach = tas2mach_torch(v_mid, T)
+            mach = torch.clamp(tas2mach_torch(v_mid, T), max=5.0)
             vcas = tas2cas_torch(v_mid, p, rho)
             
-            mratio = mach / cruise_mach
-            vratio = vcas / torch.clamp(vcas_ref, min=1.0)
+            mratio = torch.clamp(mach / cruise_mach, max=10.0)
+            vratio = torch.clamp(vcas / torch.clamp(vcas_ref, min=1.0), max=10.0)
             
             # Segment 3 (Alt > 30000 ft)
             d_coef = -0.4204 * mratio + 1.0824
