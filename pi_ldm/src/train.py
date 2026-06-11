@@ -54,7 +54,8 @@ class PILDMTrainer:
                  beta_start=1e-4, 
                  beta_end=0.02,
                  device='cuda' if torch.cuda.is_available() else 'cpu',
-                 run_name="default_run"):
+                 run_name="default_run",
+                 ac_types=None):
         
         self.device = device
         self.run_name = run_name
@@ -68,10 +69,10 @@ class PILDMTrainer:
         # Model
         self.model = ConditionalUNet1D(state_dim=state_dim, cond_dim=cond_dim).to(device)
         
-        # Physics (Disabled by default, kept for future use)
-        self.enable_physics = False
+        # Physics (Enabled by default)
+        self.enable_physics = True
         if self.enable_physics:
-            self.physics_loss_fn = PhysicsLoss(dt=1.0, gamma1=1.0, gamma2=1.0, gamma3=1.0).to(device)
+            self.physics_loss_fn = PhysicsLoss(ac_types=ac_types, dt=1.0, gamma1=1.0, gamma2=1.0, gamma3=1.0).to(device)
             self.lambda_physics = 0.1 
             self.lambda2_physics = 0.1
             self.lambda3_physics = 0.1
@@ -152,7 +153,7 @@ class PILDMTrainer:
             # Transpose from (batch, state_dim, seq_len) to (batch, seq_len, state_dim)
             trajectories = x0_phys.transpose(1, 2)
             
-            loss_physics = self.physics_loss_fn(trajectories)
+            loss_physics = self.physics_loss_fn(trajectories, cond)
             loss_total = loss_diff + self.lambda_physics * loss_physics
         else:
             # Total Loss (Standard Diffusion Only)
@@ -172,7 +173,8 @@ def main():
     # Load all available files
     train_loader, _ = get_dataloaders(data_dir, batch_size=32, file_base=FILE_BASE)
     
-    trainer = PILDMTrainer(run_name=FILE_BASE)
+    ac_types = list(train_loader.dataset.le_type.classes_) if hasattr(train_loader.dataset, 'le_type') else None
+    trainer = PILDMTrainer(run_name=FILE_BASE, ac_types=ac_types)
     
     # --- Resume Training ---
     start_epoch, best_loss = trainer.load_checkpoint()
@@ -187,7 +189,7 @@ def main():
     
     for epoch in range(start_epoch, max_epochs):
         epoch_diff = 0
-        epoch_phys = 0
+        epoch_total = 0
         
         for batch_idx, (x_0, cond) in enumerate(train_loader):
             x_0 = x_0.to(trainer.device)
@@ -195,9 +197,10 @@ def main():
             
             l_diff, l_tot = trainer.train_step(x_0, cond)
             epoch_diff += l_diff
+            epoch_total += l_tot
             
         avg_diff = epoch_diff / max(1, len(train_loader))
-        avg_total = avg_diff # Add logic here if tracking phys
+        avg_total = epoch_total / max(1, len(train_loader))
             
         print(f"Epoch {epoch:04d} | Total: {avg_total:.5f} | Diff: {avg_diff:.5f}")
         

@@ -34,29 +34,41 @@ class AircraftTrajectoryDataset(Dataset):
             files = [file_base]
         else:
             npy_files = glob.glob(os.path.join(data_dir, "*.npy"))
-            files = [os.path.basename(f).replace(".npy", "") for f in npy_files]
+            # Fallback to check clusters folder as well
+            parent_dir = os.path.dirname(data_dir)
+            clusters_dir = os.path.join(parent_dir, "clusters")
+            if os.path.exists(clusters_dir):
+                npy_files += glob.glob(os.path.join(clusters_dir, "*.npy"))
+            files = list(set([os.path.basename(f).replace(".npy", "") for f in npy_files]))
         
         all_X = []
         all_meta = []
         
         # Load all detected pairs
         for base in sorted(files):
+            # Check primary data_dir first
             X_path = os.path.join(data_dir, f"{base}.npy")
             meta_path = os.path.join(data_dir, f"{base}.csv")
+            
+            # Fallback to clusters folder if not found
+            if not (os.path.exists(X_path) and os.path.exists(meta_path)):
+                parent_dir = os.path.dirname(data_dir)
+                clusters_dir = os.path.join(parent_dir, "clusters")
+                X_path = os.path.join(clusters_dir, f"{base}.npy")
+                meta_path = os.path.join(clusters_dir, f"{base}.csv")
             
             if os.path.exists(X_path) and os.path.exists(meta_path):
                 all_X.append(np.load(X_path))
                 all_meta.append(pd.read_csv(meta_path))
             else:
                 if file_base:
-                    print(f"Error: Specified file not found: {base}")
+                    print(f"Error: Specified file not found in processed or clusters: {base}")
         
         if not all_X:
-            print(f"No data found in {data_dir}")
-            self.X = np.zeros((1, 4, 200), dtype=np.float32)
-            self.cond = np.zeros((1, 3), dtype=np.float32)
-            self.X_norm = self.normalize(self.X)
-            return
+            msg = f"Dataset not found: No matching .npy/.csv file pairs found in '{data_dir}' or clusters folder"
+            if file_base:
+                msg += f" for file_base '{file_base}'"
+            raise FileNotFoundError(msg)
 
         # Concatenate all loaded data
         self.X = np.concatenate(all_X, axis=0)

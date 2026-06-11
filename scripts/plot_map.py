@@ -71,8 +71,7 @@ def compute_positions(X, meta, anchor_lat, anchor_lon):
 
 def main():
     # --- CONFIGURATION AREA ---
-    FILE_BASE = "LSZH_2019_R14_kinematic_200pts_spatial_5000m_c1_synthetic_1000t"
-    #FILE_BASE = "LSZH_2019_R14_kinematic_200pts_clust5_C2"
+    FILE_BASE = "LSZH_2019_R14_kinematic_200pts_spatial_5000m_synthetic_1000t"
     AIRPORT_CODE = "LSZH"
     PLOT_MAP_BACKGROUND = False  # Set to True to overlay geographic map tiles (requires contextily)
     # --------------------------
@@ -220,23 +219,21 @@ def main():
         # Set aspect ratio suitable for given latitude
         plt.gca().set_aspect(1.0 / np.cos(np.radians(anchor_lat)))
     
-    # Output path
-    output_dir = os.path.join(base_dir, "outputs", "plots")
+    # Determine the appropriate output directory based on where the data was loaded from
+    relative_path = os.path.relpath(X_file_npy, base_dir)
+    path_parts = relative_path.split(os.sep)
+    
+    if "pi_ldm" in path_parts:
+        output_dir = os.path.join(base_dir, "pi_ldm", "outputs", "plots")
+    else:
+        output_dir = os.path.join(base_dir, "outputs", "plots")
+        
     os.makedirs(output_dir, exist_ok=True)
     out_map = os.path.join(output_dir, f'map_{FILE_BASE}.png')
     
     plt.tight_layout()
     plt.savefig(out_map, dpi=200)
     print(f"Saved computed trajectory map to {out_map}")
-    
-    # Also save to pi_ldm/outputs/plots if appropriate
-    pildm_dir = os.path.join(base_dir, "pi_ldm")
-    if os.path.exists(pildm_dir):
-        pildm_plot_dir = os.path.join(pildm_dir, "outputs", "plots")
-        os.makedirs(pildm_plot_dir, exist_ok=True)
-        pildm_out_map = os.path.join(pildm_plot_dir, f'map_{FILE_BASE}.png')
-        plt.savefig(pildm_out_map, dpi=200)
-        print(f"Also saved plot to {pildm_out_map}")
 
     plt.show()
 
