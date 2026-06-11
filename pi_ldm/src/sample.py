@@ -54,17 +54,17 @@ class PILDMSampler:
     dz = [ f(z,t) - g(t)^2 \nabla_z \log p_t(z|c) + \eta \nabla_z \Phi(z) ] dt + g(t) dw
     """
     def __init__(self, model_path=None, state_dim=4, cond_dim=3, seq_len=200, timesteps=1000, 
-                 device='cuda' if torch.cuda.is_available() else 'cpu', ac_types=None):
+                 device='cuda' if torch.cuda.is_available() else 'cpu', ac_types=None, enable_physics=True):
         self.device = device
         self.state_dim = state_dim
         self.seq_len = seq_len
         self.timesteps = timesteps
         self.ac_types = ac_types
+        self.enable_physics = enable_physics
         
         self.model = ConditionalUNet1D(state_dim=state_dim, cond_dim=cond_dim).to(device)
         
         # Physics Guidance (Enabled by default)
-        self.enable_physics = True
         if self.enable_physics:
             self.physics_fn = PhysicsLoss(ac_types=ac_types).to(device)
         
@@ -72,7 +72,16 @@ class PILDMSampler:
             self.model.load_state_dict(torch.load(model_path, map_location=device))
             print(f"Loaded model from {model_path}")
         else:
-            print("No model path provided or file missing, using random weights.")
+            if self.enable_physics:
+                raise FileNotFoundError(
+                    f"Error: Physics-trained model weights not found at '{model_path}'. "
+                    "Please train the model with physics active first to generate these weights."
+                )
+            else:
+                raise FileNotFoundError(
+                    f"Error: Standard model weights not found at '{model_path}'. "
+                    "Please train the standard model first to generate these weights."
+                )
             
         self.model.eval()
 
@@ -155,13 +164,21 @@ class PILDMSampler:
 
 def main():
     FILE_BASE = "LSZH_2019_R14_kinematic_200pts_spatial_5000m_c1"
+    ENABLE_PHYSICS = True  # Set to False to load/sample from the standard non-physics model
 
     print("Initializing sampler...")
-    # Look for model in root
-    model_path = os.path.join(MODELS_DIR, f"{FILE_BASE}_final_model.pth")
-    # Fallback to checkpoint if final doesn't exist
-    if not os.path.exists(model_path):
-        model_path = os.path.join(MODELS_DIR, f"{FILE_BASE}_checkpoint_latest.pth")
+    
+    # Determine the model name dynamically based on the ENABLE_PHYSICS flag
+    if ENABLE_PHYSICS:
+        model_name = f"{FILE_BASE}_physics"
+        model_path = os.path.join(MODELS_DIR, f"{model_name}_final_model.pth")
+        if not os.path.exists(model_path):
+            model_path = os.path.join(MODELS_DIR, f"{model_name}_checkpoint_latest.pth")
+    else:
+        model_name = FILE_BASE
+        model_path = os.path.join(MODELS_DIR, f"{model_name}_final_model.pth")
+        if not os.path.exists(model_path):
+            model_path = os.path.join(MODELS_DIR, f"{model_name}_checkpoint_latest.pth")
     
     # Load aircraft type list from dataset CSV metadata to align categories
     csv_path = os.path.join(project_root, "data", "processed", f"{FILE_BASE}.csv")
@@ -175,19 +192,18 @@ def main():
     else:
         ac_types = None
         
-    sampler = PILDMSampler(model_path=model_path, ac_types=ac_types)
+    sampler = PILDMSampler(model_path=model_path, ac_types=ac_types, enable_physics=ENABLE_PHYSICS)
     
     # Generate x trajectories for a single condition (e.g., Airport: LSZH (0), Type: A320 (0), Weather: 0)
     num_samples = 1000
-    save_file = f"{FILE_BASE}_synthetic_{num_samples}t"
+    save_file = f"{model_name}_synthetic_{num_samples}t"
     cond = torch.tensor([[0.0, 0.0, 0.0]], device=sampler.device).repeat(num_samples, 1)
     
-    print(f"Generating {num_samples} trajectories with Physics Guidance...")
-    trajectories = sampler.sample(cond, enable_guidance=True)
+    print(f"Generating {num_samples} trajectories with Physics Guidance={ENABLE_PHYSICS}...")
+    trajectories = sampler.sample(cond, enable_guidance=ENABLE_PHYSICS)
     print("Generated shape:", trajectories.shape)
 
     # Save the generated trajectories
-    # output_dir = os.path.join(base_dir, "pi_ldm", "outputs", "trajectories") # Old path
     output_dir = OUTPUTS_DIR
     
     # Convert to numpy and save

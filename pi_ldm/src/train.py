@@ -72,6 +72,7 @@ class PILDMTrainer:
         # Physics (Enabled by default)
         self.enable_physics = True
         if self.enable_physics:
+            self.run_name = f"{run_name}_physics"
             self.physics_loss_fn = PhysicsLoss(ac_types=ac_types, dt=1.0, gamma1=1.0, gamma2=1.0, gamma3=1.0).to(device)
             self.lambda_physics = 0.1 
             self.lambda2_physics = 0.1
@@ -221,7 +222,7 @@ def main():
             trainer.save_checkpoint(epoch, avg_total)
 
     # Final Save
-    output_path = os.path.join(MODELS_DIR, f"{FILE_BASE}_final_model.pth")
+    output_path = os.path.join(MODELS_DIR, f"{trainer.run_name}_final_model.pth")
     torch.save(trainer.model.state_dict(), output_path)
     print(f"Final model saved to {output_path}")
 
