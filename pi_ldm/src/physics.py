@@ -213,7 +213,7 @@ class PhysicsLoss(nn.Module):
             # Wrap heading rate angular differences cleanly
             dpsi = torch.atan2(torch.sin(dpsi), torch.cos(dpsi))
             
-            roc = dh / dt       # Rate of climb/descent (m/s)
+            roc = torch.clamp(dh / dt, min=-500.0, max=500.0)       # Rate of climb/descent (m/s)
             acc = torch.clamp(dv / dt, min=-100.0, max=100.0)  # Acceleration (m/s^2)
             omega = dpsi / dt   # Heading change rate (rad/s)
             
@@ -229,10 +229,11 @@ class PhysicsLoss(nn.Module):
             cd0 = props['cd0']
             k = props['k']
             mass = props['mass']
+            g0 = 9.80665
             
             qS = 0.5 * rho * (v_mid ** 2) * S
             gamma = torch.atan2(roc, v_mid)
-            L = mass * 9.80665 * torch.cos(gamma)
+            L = mass * g0 * torch.cos(gamma)
             cl = L / torch.clamp(qS, min=1e-3)
             cd = cd0 + k * (cl ** 2)
             Drag_force = cd * qS
@@ -294,14 +295,17 @@ class PhysicsLoss(nn.Module):
             # --- Loss Computations ---
             
             # A. Equation of Motion (Kinematic bounds check)
+            # Normalize acc error by gravity g0 to make it dimensionless (O(1))
             acc_max = (Thrust_max - Drag_force) / mass
             acc_min = (Thrust_idle - Drag_force) / mass
-            loss_eom_i = torch.mean(torch.square(torch.relu(acc - acc_max)) + torch.square(torch.relu(acc_min - acc)))
+            loss_eom_i = torch.mean(torch.square(torch.relu(acc - acc_max) / g0) + torch.square(torch.relu(acc_min - acc) / g0))
             total_eom = total_eom + loss_eom_i
             
             # B. Energy Conservation (Power Balance Check)
-            T_req = Drag_force + mass * (9.80665 * roc / v_mid + acc)
-            loss_energy_i = torch.mean(torch.square(torch.relu(T_req - Thrust_max)) + torch.square(torch.relu(Thrust_idle - T_req)))
+            # T_req is huge (Newtons), normalize by aircraft weight (mass * g0) to get specific excess thrust scale
+            T_req = Drag_force + mass * (g0 * roc / v_mid + acc)
+            weight = mass * g0
+            loss_energy_i = torch.mean(torch.square(torch.relu(T_req - Thrust_max) / weight) + torch.square(torch.relu(Thrust_idle - T_req) / weight))
             total_energy = total_energy + loss_energy_i
             
             # C. Flight Envelope (Stall, Max Speed, Vertical Rate, Bank Angle)
@@ -309,13 +313,15 @@ class PhysicsLoss(nn.Module):
             v_max = props['v_max']
             max_roc_val = props['max_roc']
             
-            loss_stall = torch.square(torch.relu(v_stall - v_mid))
-            loss_vmax = torch.square(torch.relu(v_mid - v_max))
-            loss_roc = torch.square(torch.relu(torch.abs(roc) - max_roc_val))
+            # Normalize velocities by v_max, roc by max_roc_val
+            loss_stall = torch.square(torch.relu(v_stall - v_mid) / v_stall)
+            loss_vmax = torch.square(torch.relu(v_mid - v_max) / v_max)
+            loss_roc = torch.square(torch.relu(torch.abs(roc) - max_roc_val) / max_roc_val)
             
             # Bank angle: phi = atan(V * turn_rate / g0)
-            bank_angle = torch.atan2(v_mid * omega, torch.tensor(9.80665, device=device))
-            loss_bank = torch.square(torch.relu(torch.abs(bank_angle) - 0.5236)) # Max bank 30 degrees (0.5236 rad)
+            bank_angle = torch.atan2(v_mid * omega, torch.tensor(g0, device=device))
+            # Bank angle is already in radians (O(1)), max bank 30 degrees (0.5236 rad)
+            loss_bank = torch.square(torch.relu(torch.abs(bank_angle) - 0.5236))
             
             loss_envelope_i = torch.mean(loss_stall + loss_vmax + loss_roc + loss_bank)
             total_envelope = total_envelope + loss_envelope_i
