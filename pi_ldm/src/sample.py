@@ -143,7 +143,13 @@ class PILDMSampler:
                     grad_phi = torch.autograd.grad(phi, x_t_grad)[0]
                 
                 # Apply the guidance term
-                guidance = eta * grad_phi
+                # Scale gradient to prevent it from destroying the generated trajectory
+                grad_norm = torch.norm(grad_phi.reshape(batch_size, -1), dim=-1).view(-1, 1, 1) + 1e-8
+                grad_phi_normalized = grad_phi / grad_norm
+                
+                # The guidance step should scale with the variance of the current timestep
+                # to prevent large jumps at the end of the generation process
+                guidance = eta * self.beta[t_idx] * grad_phi_normalized
             else:
                 guidance = 0.0
 
