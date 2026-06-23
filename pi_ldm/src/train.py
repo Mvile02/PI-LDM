@@ -154,7 +154,16 @@ class PILDMTrainer:
             # Transpose from (batch, state_dim, seq_len) to (batch, seq_len, state_dim)
             trajectories = x0_phys.transpose(1, 2)
             
-            loss_physics = self.physics_loss_fn(trajectories, cond)
+            # physics_loss_fn now returns a tensor of shape (batch_size,)
+            loss_physics_per_sample = self.physics_loss_fn(trajectories, cond)
+            
+            # Time-based weighting for physics loss (PER SAMPLE)
+            # We only enforce strict physics constraints at low noise levels (t close to 0)
+            # At high noise levels (t close to timesteps), the network must focus on global structure
+            w_t = 1.0 - (t.float() / self.timesteps)
+            
+            loss_physics = torch.mean(loss_physics_per_sample * w_t)
+            
             loss_total = loss_diff + self.lambda_physics * loss_physics
         else:
             # Total Loss (Standard Diffusion Only)

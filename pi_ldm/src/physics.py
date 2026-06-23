@@ -171,9 +171,9 @@ class PhysicsLoss(nn.Module):
         batch_size = trajectories.shape[0]
         device = trajectories.device
         
-        total_eom = torch.tensor(0.0, device=device)
-        total_energy = torch.tensor(0.0, device=device)
-        total_envelope = torch.tensor(0.0, device=device)
+        total_eom = []
+        total_energy = []
+        total_envelope = []
         
         for i in range(batch_size):
             # 1. Resolve aircraft properties
@@ -299,14 +299,14 @@ class PhysicsLoss(nn.Module):
             acc_max = (Thrust_max - Drag_force) / mass
             acc_min = (Thrust_idle - Drag_force) / mass
             loss_eom_i = torch.mean(torch.square(torch.relu(acc - acc_max) / g0) + torch.square(torch.relu(acc_min - acc) / g0))
-            total_eom = total_eom + loss_eom_i
+            total_eom.append(loss_eom_i)
             
             # B. Energy Conservation (Power Balance Check)
             # T_req is huge (Newtons), normalize by aircraft weight (mass * g0) to get specific excess thrust scale
             T_req = Drag_force + mass * (g0 * roc / v_mid + acc)
             weight = mass * g0
             loss_energy_i = torch.mean(torch.square(torch.relu(T_req - Thrust_max) / weight) + torch.square(torch.relu(Thrust_idle - T_req) / weight))
-            total_energy = total_energy + loss_energy_i
+            total_energy.append(loss_energy_i)
             
             # C. Flight Envelope (Stall, Max Speed, Vertical Rate, Bank Angle)
             v_stall = props['v_stall']
@@ -324,12 +324,11 @@ class PhysicsLoss(nn.Module):
             loss_bank = torch.square(torch.relu(torch.abs(bank_angle) - 0.5236))
             
             loss_envelope_i = torch.mean(loss_stall + loss_vmax + loss_roc + loss_bank)
-            total_envelope = total_envelope + loss_envelope_i
+            total_envelope.append(loss_envelope_i)
             
-        # Average over batch size
-        total_eom = total_eom / batch_size
-        total_energy = total_energy / batch_size
-        total_envelope = total_envelope / batch_size
+        total_eom = torch.stack(total_eom)
+        total_energy = torch.stack(total_energy)
+        total_envelope = torch.stack(total_envelope)
         
         l_physics = (self.gamma1 * total_eom) + (self.gamma2 * total_energy) + (self.gamma3 * total_envelope)
         return l_physics
