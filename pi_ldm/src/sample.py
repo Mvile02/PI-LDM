@@ -69,7 +69,12 @@ class PILDMSampler:
             self.physics_fn = PhysicsLoss(ac_types=ac_types).to(device)
         
         if model_path and os.path.exists(model_path):
-            self.model.load_state_dict(torch.load(model_path, map_location=device))
+            loaded_data = torch.load(model_path, map_location=device)
+            # Handle both raw state_dicts (final models) and checkpoint dictionaries
+            if "model_state_dict" in loaded_data:
+                self.model.load_state_dict(loaded_data["model_state_dict"])
+            else:
+                self.model.load_state_dict(loaded_data)
             print(f"Loaded model from {model_path}")
         else:
             if self.enable_physics:
@@ -140,7 +145,8 @@ class PILDMSampler:
                     phi = self.potential_function(x0_hat, cond)
                     
                     # Compute gradient w.r.t x_t \nabla_{x_t} \Phi(x_t)
-                    grad_phi = torch.autograd.grad(phi, x_t_grad)[0]
+                    # phi is now a tensor of shape (batch_size,), so we sum it to get a scalar for autograd
+                    grad_phi = torch.autograd.grad(phi.sum(), x_t_grad)[0]
                 
                 # Apply the guidance term
                 # Scale gradient to prevent it from destroying the generated trajectory
