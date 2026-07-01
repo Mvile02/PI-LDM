@@ -6,3 +6,5 @@ data/
 __pycache__
 .env
 .vscode
+brain/
+DM_FM_Trajectories/
