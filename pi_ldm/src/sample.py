@@ -201,15 +201,30 @@ def main():
         import pandas as pd
         df = pd.read_csv(csv_path)
         ac_types = sorted(df['typecode'].astype(str).unique())
+        
+        # Calculate realistic distribution (empirical probabilities)
+        type_counts = df['typecode'].astype(str).value_counts(normalize=True)
+        type_probs = [type_counts.get(ac, 0.0) for ac in ac_types]
     else:
         ac_types = None
+        type_probs = None
         
     sampler = PILDMSampler(model_path=model_path, ac_types=ac_types, enable_physics=ENABLE_PHYSICS)
     
-    # Generate x trajectories for a single condition (e.g., Airport: LSZH (0), Type: A320 (0), Weather: 0)
     num_samples = 1000
     save_file = f"{model_name}_synthetic_{num_samples}t"
-    cond = torch.tensor([[0.0, 0.0, 0.0]], device=sampler.device).repeat(num_samples, 1)
+    
+    # Generate condition tensor based on realistic distribution
+    if type_probs is not None:
+        # Sample aircraft indices using the real probabilities from the dataset
+        sampled_indices = np.random.choice(len(ac_types), size=num_samples, p=type_probs)
+    else:
+        sampled_indices = np.zeros(num_samples) # Fallback to index 0
+        
+    cond = torch.zeros((num_samples, 3), device=sampler.device)
+    cond[:, 0] = 0.0  # Airport (e.g., LSZH is 0)
+    cond[:, 1] = torch.tensor(sampled_indices, dtype=torch.float32, device=sampler.device)
+    cond[:, 2] = 0.0  # Weather
     
     print(f"Generating {num_samples} trajectories with Physics Guidance={ENABLE_PHYSICS}...")
     trajectories = sampler.sample(cond, enable_guidance=ENABLE_PHYSICS)
