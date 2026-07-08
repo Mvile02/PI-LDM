@@ -288,10 +288,31 @@ class TrajectoryEvaluator:
         
         X_gen_train, y_gen_train = build_io_pairs(gen_data)
         
+        # Apply Standardization to make LSTM training stable and meaningful
+        scaler_X = StandardScaler()
+        scaler_y = StandardScaler()
+        
+        def fit_transform_3d(scaler, data):
+            N, S, F = data.shape
+            return scaler.fit_transform(data.reshape(-1, F)).reshape(N, S, F)
+            
+        def transform_3d(scaler, data):
+            N, S, F = data.shape
+            return scaler.transform(data.reshape(-1, F)).reshape(N, S, F)
+            
+        X_real_train_scaled = fit_transform_3d(scaler_X, X_real_train)
+        y_real_train_scaled = scaler_y.fit_transform(y_real_train)
+        
+        X_real_test_scaled = transform_3d(scaler_X, X_real_test)
+        y_real_test_scaled = scaler_y.transform(y_real_test)
+        
+        X_gen_train_scaled = transform_3d(scaler_X, X_gen_train)
+        y_gen_train_scaled = scaler_y.transform(y_gen_train)
+        
         # Datasets
-        ds_tstr = TensorDataset(torch.tensor(X_gen_train, dtype=torch.float32), torch.tensor(y_gen_train, dtype=torch.float32))
-        ds_trtr = TensorDataset(torch.tensor(X_real_train, dtype=torch.float32), torch.tensor(y_real_train, dtype=torch.float32))
-        ds_test = TensorDataset(torch.tensor(X_real_test, dtype=torch.float32), torch.tensor(y_real_test, dtype=torch.float32))
+        ds_tstr = TensorDataset(torch.tensor(X_gen_train_scaled, dtype=torch.float32), torch.tensor(y_gen_train_scaled, dtype=torch.float32))
+        ds_trtr = TensorDataset(torch.tensor(X_real_train_scaled, dtype=torch.float32), torch.tensor(y_real_train_scaled, dtype=torch.float32))
+        ds_test = TensorDataset(torch.tensor(X_real_test_scaled, dtype=torch.float32), torch.tensor(y_real_test_scaled, dtype=torch.float32))
         
         loader_tstr = DataLoader(ds_tstr, batch_size=batch_size, shuffle=True)
         loader_trtr = DataLoader(ds_trtr, batch_size=batch_size, shuffle=True)
@@ -488,10 +509,15 @@ class TrajectoryEvaluator:
             dist_real_to_real[i, idx] = np.inf
         min_dist_real_to_real = np.min(dist_real_to_real, axis=1)
         
+        # Compute shared bins for proper visualization
+        min_val = min(np.min(min_dist_real_to_real), np.min(min_dist_gen_to_real))
+        max_val = max(np.max(min_dist_real_to_real), np.max(min_dist_gen_to_real))
+        bins = np.linspace(min_val, max_val, 30)
+
         # Plot distributions
         plt.figure(figsize=(10, 6))
-        plt.hist(min_dist_real_to_real, bins=30, alpha=0.6, label='Real-to-Real (Baseline)', color='gray')
-        plt.hist(min_dist_gen_to_real, bins=30, alpha=0.6, label='Synthetic-to-Real (Memorization Check)', color='orange')
+        plt.hist(min_dist_real_to_real, bins=bins, alpha=0.6, label=f'Real-to-Real (n={n_real})', color='gray')
+        plt.hist(min_dist_gen_to_real, bins=bins, alpha=0.6, label=f'Synthetic-to-Real (n={n_gen})', color='orange')
         plt.xlabel('Euclidean Distance to Nearest Real Trajectory (Standardized)')
         plt.ylabel('Count')
         plt.title('Memorization Check (1-NN Distance Distribution)')
@@ -705,7 +731,7 @@ if __name__ == '__main__':
     else:
         # Determine files automatically if not specified
         real_file = args.real if args.real else os.path.join(project_root, "data", "processed", "LSZH_2019_R14_kinematic_200pts_spatial_5000m.npy")
-        gen_file = args.gen if args.gen else os.path.join(project_root, "pi_ldm", "outputs", "trajectories", "LSZH_2019_R14_kinematic_200pts_spatial_5000m_synthetic_1000t.npy")
+        gen_file = args.gen if args.gen else os.path.join(project_root, "pi_ldm", "outputs", "trajectories", "LSZH_2019_R14_kinematic_200pts_spatial_5000m_cond_synthetic_1000t.npy")
         out_dir = args.output_dir if args.output_dir else os.path.join(project_root, "pi_ldm", "outputs", "evaluation_results")
         
         run_model_evaluation(real_file, gen_file, out_dir)

@@ -71,7 +71,7 @@ def compute_positions(X, meta, anchor_lat, anchor_lon):
 
 def main():
     # --- CONFIGURATION AREA ---
-    FILE_BASE = "LSZH_2019_R14_kinematic_200pts_spatial_5000m_synthetic_1000t_smoothed"
+    FILE_BASE = "LSZH_2019_R14_kinematic_200pts_spatial_5000m_cond_synthetic_1000t_smoothed"  # Base name of the .npy file (without extension)
     AIRPORT_CODE = "LSZH"
     PLOT_MAP_BACKGROUND = False  # Set to True to overlay geographic map tiles (requires contextily)
     # --------------------------
@@ -158,7 +158,7 @@ def main():
     
     # Plotting
     plt.figure(figsize=(10, 10))
-    plt.title(f'Coordinate based Trajectories for {AIRPORT_CODE} (N={len(X)})')
+    plt.title(f'Coordinate based Trajectories for {AIRPORT_CODE} (R14, N={len(X)})')
     
     # Plot flights
     if labels is not None:

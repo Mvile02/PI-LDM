@@ -4,7 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 
-def visualize_trajectories(X_filepath, meta_filepath, num_samples=3):
+def visualize_trajectories(X_filepath, meta_filepath, num_samples=3, orig_dataset=None):
     # Load the tensors and metadata
     try:
         X = np.load(X_filepath, allow_pickle=True).astype(np.float32)
@@ -14,14 +14,24 @@ def visualize_trajectories(X_filepath, meta_filepath, num_samples=3):
         return
         
     meta = None
+    ac_types_mapping = None
     if os.path.exists(meta_filepath):
         meta = pd.read_csv(meta_filepath)
+        # If typecode is numeric (synthetic data), try to load mapping from original dataset
+        if 'typecode' in meta.columns and pd.api.types.is_numeric_dtype(meta['typecode']) and orig_dataset:
+            base_dir_local = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            for loc in ['processed', 'clusters']:
+                orig_csv = os.path.join(base_dir_local, 'data', loc, f"{orig_dataset}.csv")
+                if os.path.exists(orig_csv):
+                    orig_df = pd.read_csv(orig_csv)
+                    ac_types_mapping = sorted(orig_df['typecode'].astype(str).unique())
+                    break
 
     print("Press 'n' in the plot window to see a new set of random trajectories.")
     
     # Create the figure once
     fig, axes = plt.subplots(3, 1, figsize=(12, 12), sharex=True)
-    fig.suptitle('PI-LDM Input Format: Landing Kinematics over 200 Resampled Points', fontsize=16)
+    fig.suptitle('Landing Kinematics over 200 Resampled Points', fontsize=16)
 
     def update_plot(event=None):
         if event is not None and event.key != 'n':
@@ -42,8 +52,14 @@ def visualize_trajectories(X_filepath, meta_filepath, num_samples=3):
             x_axis = np.arange(200)
             
             callsign = meta.iloc[idx]['callsign'] if meta is not None and 'callsign' in meta.columns else f"Sample {idx}"
-            ac_type = meta.iloc[idx]['typecode'] if meta is not None and 'typecode' in meta.columns else "Unknown"
-            label = f"{callsign} ({ac_type})"
+            ac_type_val = meta.iloc[idx]['typecode'] if meta is not None and 'typecode' in meta.columns else "Unknown"
+            
+            if ac_types_mapping is not None and isinstance(ac_type_val, (int, float, np.integer, np.floating)) and not pd.isna(ac_type_val):
+                type_idx = int(ac_type_val)
+                if 0 <= type_idx < len(ac_types_mapping):
+                    ac_type_val = ac_types_mapping[type_idx]
+                    
+            label = f"{callsign} ({ac_type_val})"
             
             # Subplot 0: Altitude Profile
             axes[0].plot(x_axis, altitude, label=label, color=c, linewidth=2)
@@ -59,7 +75,7 @@ def visualize_trajectories(X_filepath, meta_filepath, num_samples=3):
             # Subplot 2: Track Angle
             axes[2].plot(x_axis, track, color=c, linewidth=2)
             axes[2].set_ylabel('Track Angle (deg)')
-            axes[2].set_xlabel('Resampled Waypoint Index (N=0 to 199)')
+            axes[2].set_xlabel('Resampled Waypoint Index')
             axes[2].grid(True, linestyle='--', alpha=0.7)
 
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
@@ -85,9 +101,11 @@ def visualize_trajectories(X_filepath, meta_filepath, num_samples=3):
 
 if __name__ == "__main__":
     # --- CONFIGURATION AREA ---
-    # The base name used in filter_data.py (without extension)
-    FILE_BASE = "LSZH_2019_R14_kinematic_200pts_spatial_5000m_c1_synthetic_1000t"
-    #FILE_BASE = "sample_trajectory_denoised"
+    # The base name of the trajectories you want to plot (without extension)
+    FILE_BASE = "LSZH_2019_R14_kinematic_200pts_spatial_5000m_cond_synthetic_1000t"
+    
+    # The base name of the original training dataset (to recover aircraft type names)
+    ORIGINAL_DATASET_BASE = "LSZH_2019_R14_kinematic_200pts_spatial_5000m"
     # --------------------------
 
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -111,5 +129,5 @@ if __name__ == "__main__":
         
     meta_file = X_file.replace('.npy', '.csv')
 
-    visualize_trajectories(X_file, meta_file, num_samples=3)
+    visualize_trajectories(X_file, meta_file, num_samples=3, orig_dataset=ORIGINAL_DATASET_BASE)
 

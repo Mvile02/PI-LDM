@@ -64,7 +64,9 @@ def main():
     N_CLUSTERS = 4
     
     # Threshold for deviation from the cluster center
-    THRESHOLD_MEAN_M = 5000  
+    THRESHOLD_MEAN_M = 75000  
+    
+    PLOT_MAP_BACKGROUND = True
     
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     X_file = os.path.join(base_dir, "data", "processed", f"{FILE_BASE}.npy")
@@ -183,13 +185,24 @@ def main():
         
     plt.scatter(anchor_lon, anchor_lat, color='red', marker='x', s=100, zorder=6, label='RWY 14')
     
-    plt.gca().set_aspect(1.0 / np.cos(np.radians(anchor_lat)))
+    # Geographic Map overlay
+    if PLOT_MAP_BACKGROUND:
+        try:
+            import contextily as ctx
+            print("Downloading map tiles and adding to plot...")
+            ctx.add_basemap(plt.gca(), crs="EPSG:4326", source=ctx.providers.Esri.WorldImagery)
+        except ImportError:
+            print("Warning: 'contextily' is not installed. Run 'pip install contextily' to see the map background.")
+            plt.gca().set_aspect(1.0 / np.cos(np.radians(anchor_lat)))
+    else:
+        plt.gca().set_aspect(1.0 / np.cos(np.radians(anchor_lat)))
+        
     plt.xlabel('Longitude')
     plt.ylabel('Latitude')
-    leg = plt.legend()
-    for line in leg.get_lines():
-        line.set_alpha(1.0)
-    plt.grid(True, linestyle='--', alpha=0.5)
+    # leg = plt.legend()
+    # for line in leg.get_lines():
+    #     line.set_alpha(1.0)
+    #plt.grid(True, linestyle='--', alpha=0.5)
     
     # Output path
     out_dir = os.path.join(base_dir, "outputs", "plots")

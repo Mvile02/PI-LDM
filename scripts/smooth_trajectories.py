@@ -18,7 +18,7 @@ def smooth_trajectories(input_filepath=None, output_filepath=None, window_length
         median_window: Window size for the median filter (must be odd). Set to 0 to disable.
     """
     if input_filepath is None:
-        input_filepath = r"pi_ldm\outputs\trajectories\LSZH_2019_R14_kinematic_200pts_spatial_5000m_synthetic_1000t.npy"
+        input_filepath = r"pi_ldm\outputs\trajectories\LSZH_2019_R14_kinematic_200pts_spatial_5000m_cond_synthetic_1000t.npy"
 
     print(f"Loading data from {input_filepath}...")
     try:
