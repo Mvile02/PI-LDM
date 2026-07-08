@@ -43,21 +43,35 @@ A physics-informed training option is available within this repository (`pi_ldm/
    pip install -r requirements.txt
    ```
 
-## Usage
+## Usage / Replicating the Results
 
-You can use the provided PowerShell wrappers in `pi_ldm/bin/` to easily start the processes:
+To fully replicate the results of the thesis from scratch, follow this step-by-step pipeline. 
 
-### 1. Training the Model
-To train the model from scratch, simply run:
-```powershell
-.\pi_ldm\bin\train.ps1
+> **Note:** Pre-trained model weights (`.pth` files) are already available in the `pi_ldm/models/` directory, so you can skip directly to step 4 (Sampling & Evaluation) if you do not want to retrain the model.
+
+### 1. Extract the Data
+First, extract and preprocess the raw flight data into a usable kinematic tensor using the dataset builder script:
+```bash
+python scripts/dataset_builder.py
 ```
-*(This sets up the `PYTHONPATH` correctly and executes `src/train.py`)*
+*(This extracts kinematics such as track, groundspeed, and altitude, handles resampling, and saves `.npy` arrays for training).*
 
-### 2. Evaluating the Model
-To sample from a trained model and generate evaluation metrics:
+### 2. Cluster the Trajectories (Optional)
+If you wish to analyze specific approach clusters or filter out anomalous paths before training, run the clustering script:
 ```powershell
-.\pi_ldm\bin\eval.ps1
+python scripts/trajectory_clusterer.py
 ```
 
-*(Alternatively, you can run the python scripts directly from the `pi_ldm/src/` folder provided your `PYTHONPATH` is set to the repository root).*
+### 3. Training the Model
+To train the model from scratch on the processed data, execute the training script from the root directory:
+```bash
+python pi_ldm/src/train.py
+```
+*(Ensure your `PYTHONPATH` is set to the repository root if you encounter import issues).*
+
+### 4. Sampling & Evaluation
+To sample synthetic trajectories from the trained model (or the pre-trained `.pth` models) and generate the evaluation metrics:
+```bash
+python pi_ldm/src/sample.py
+```
+*(You can also use `python pi_ldm/src/evaluation.py` to run additional fidelity, diversity, and memorization tests).*
