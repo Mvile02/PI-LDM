@@ -1,10 +1,10 @@
 # Generation of TMA Landing Trajectories Using Diffusion Models
 
-This repository contains the codebase for generating aircraft trajectories in the Terminal Maneuvering Area (TMA) using a Physics-Informed Latent Diffusion Model (PI-LDM). The model operates in a Kinematic State Space to ensure location-agnostic generation and robust learning of flight dynamics.
+This repository contains the codebase for generating aircraft trajectories in the Terminal Maneuvering Area (TMA) using a Diffusion Model. The model operates in a Kinematic State Space to ensure location-agnostic generation and robust learning of flight dynamics.
 
 ## How It Works
 
-Instead of relying on absolute spatial coordinates (which can lead to geographic memorization), the model learns to synthesize flights based on kinematic features like track angle, groundspeed, and altitude over time. It uses a **1D Convolutional U-Net** to iteratively denoise a random sequence of these parameters, slowly shaping it into a realistic, flyable trajectory.
+The model learns to synthesize flights based on kinematic features like track angle, groundspeed, and altitude over time. It uses a **1D Convolutional U-Net** to iteratively denoise a random sequence of these parameters, shaping it into a realistic, flyable trajectory. For the sake of efficiency, this architecture directly injects a global absolute temporal coordinate axis into the data.
 
 The core pipeline involves:
 1. **Data Preprocessing**: Converting raw spatial trajectories into a continuous kinematic representation (`scripts/` and `pi_ldm/src/dataset.py`).
