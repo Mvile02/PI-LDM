@@ -71,7 +71,7 @@ def compute_positions(X, meta, anchor_lat, anchor_lon):
 
 def main():
     # --- CONFIGURATION AREA ---
-    FILE_BASE = "LSZH_2019_R14_kinematic_200pts_spatial_5000m_cond_synthetic_1000t_smoothed"  # Base name of the .npy file (without extension)
+    FILE_BASE = "LSZH_2019_R14_kinematic_200pts_spatial_5000m_c1"  # Base name of the .npy file (without extension)
     AIRPORT_CODE = "LSZH"
     PLOT_MAP_BACKGROUND = False  # Set to True to overlay geographic map tiles (requires contextily)
     # --------------------------
@@ -158,7 +158,7 @@ def main():
     
     # Plotting
     plt.figure(figsize=(10, 10))
-    plt.title(f'Coordinate based Trajectories for {AIRPORT_CODE} (R14, N={len(X)})')
+    plt.title(f'Coordinate based Trajectories for {AIRPORT_CODE} (R14, N={len(X)})', fontsize=18)
     
     # Plot flights
     if labels is not None:
@@ -185,7 +185,7 @@ def main():
                 label = 'Departure' if not has_dep else None
                 has_dep = True
             else:
-                color = 'blue'
+                color = 'red'
                 label = 'Landing' if not has_arr else None
                 has_arr = True
                 
@@ -200,8 +200,8 @@ def main():
                  color='magenta', linewidth=4, zorder=4, label='Physical Runway Strip')
     
     # Format map limits
-    plt.xlabel('Longitude')
-    plt.ylabel('Latitude')
+    plt.xlabel('Longitude', fontsize=16)
+    plt.ylabel('Latitude', fontsize=16)
     plt.legend()
     plt.grid(True, linestyle='--', alpha=0.5)
     
@@ -235,7 +235,7 @@ def main():
     plt.savefig(out_map, dpi=200)
     print(f"Saved computed trajectory map to {out_map}")
 
-    plt.show()
+    #plt.show()
 
 if __name__ == "__main__":
     main()

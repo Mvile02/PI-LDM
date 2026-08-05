@@ -31,7 +31,7 @@ def visualize_trajectories(X_filepath, meta_filepath, num_samples=3, orig_datase
     
     # Create the figure once
     fig, axes = plt.subplots(3, 1, figsize=(12, 12), sharex=True)
-    fig.suptitle('Landing Kinematics over 200 Resampled Points', fontsize=16)
+    fig.suptitle('Landing Kinematics over 200 Resampled Points', fontsize=18)
 
     def update_plot(event=None):
         if event is not None and event.key != 'n':
@@ -63,19 +63,19 @@ def visualize_trajectories(X_filepath, meta_filepath, num_samples=3, orig_datase
             
             # Subplot 0: Altitude Profile
             axes[0].plot(x_axis, altitude, label=label, color=c, linewidth=2)
-            axes[0].set_ylabel('Altitude (ft)')
+            axes[0].set_ylabel('Altitude (ft)', fontsize=16)
             axes[0].grid(True, linestyle='--', alpha=0.7)
             axes[0].legend()
             
             # Subplot 1: Groundspeed Profile
             axes[1].plot(x_axis, groundspeed, color=c, linewidth=2)
-            axes[1].set_ylabel('Groundspeed (kts)')
+            axes[1].set_ylabel('Groundspeed (kts)', fontsize=16)
             axes[1].grid(True, linestyle='--', alpha=0.7)
             
             # Subplot 2: Track Angle
             axes[2].plot(x_axis, track, color=c, linewidth=2)
-            axes[2].set_ylabel('Track Angle (deg)')
-            axes[2].set_xlabel('Resampled Waypoint Index')
+            axes[2].set_ylabel('Track Angle (deg)', fontsize=16)
+            axes[2].set_xlabel('Resampled Waypoint Index', fontsize=16)
             axes[2].grid(True, linestyle='--', alpha=0.7)
 
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
@@ -102,7 +102,7 @@ def visualize_trajectories(X_filepath, meta_filepath, num_samples=3, orig_datase
 if __name__ == "__main__":
     # --- CONFIGURATION AREA ---
     # The base name of the trajectories you want to plot (without extension)
-    FILE_BASE = "LSZH_2019_R14_kinematic_200pts_spatial_5000m_cond_synthetic_1000t"
+    FILE_BASE = "LSZH_2019_R14_kinematic_200pts_spatial_5000m"
     
     # The base name of the original training dataset (to recover aircraft type names)
     ORIGINAL_DATASET_BASE = "LSZH_2019_R14_kinematic_200pts_spatial_5000m"

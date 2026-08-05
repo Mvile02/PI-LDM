@@ -152,9 +152,11 @@ class TrajectoryEvaluator:
             
             plt.scatter(real_proj[:, 0], real_proj[:, 1], c='crimson', alpha=0.4, label='Real', edgecolors='none')
             plt.scatter(gen_proj[:, 0], gen_proj[:, 1], c='royalblue', alpha=0.4, label='Synthetic', edgecolors='none')
-            plt.xlabel(f'Principal Component 1 ({exp_var[0]:.1f}% Var)')
-            plt.ylabel(f'Principal Component 2 ({exp_var[1]:.1f}% Var)')
-            plt.title(f'PCA Trajectory Coverage (N={n_samples})')
+            plt.xlabel(f'Principal Component 1 ({exp_var[0]:.1f}% Var)', fontsize=16)
+            plt.ylabel(f'Principal Component 2 ({exp_var[1]:.1f}% Var)', fontsize=16)
+            plt.title(f'PCA Trajectory Coverage (N={n_samples})', fontsize=18)
+            plt.xticks(fontsize=16)
+            plt.yticks(fontsize=16)
             
         elif method == 't-SNE':
             tsne = TSNE(n_components=2, perplexity=30, random_state=42)
@@ -163,9 +165,11 @@ class TrajectoryEvaluator:
             
             plt.scatter(proj[:n_samples, 0], proj[:n_samples, 1], c='crimson', alpha=0.4, label='Real', edgecolors='none')
             plt.scatter(proj[n_samples:, 0], proj[n_samples:, 1], c='royalblue', alpha=0.4, label='Synthetic', edgecolors='none')
-            plt.xlabel('t-SNE Dimension 1')
-            plt.ylabel('t-SNE Dimension 2')
-            plt.title(f't-SNE Trajectory Coverage (N={n_samples})')
+            plt.xlabel('t-SNE Dimension 1', fontsize=16)
+            plt.ylabel('t-SNE Dimension 2', fontsize=16)
+            plt.title(f't-SNE Trajectory Coverage (N={n_samples})', fontsize=18)
+            plt.xticks(fontsize=16)
+            plt.yticks(fontsize=16)
             
         plt.legend(frameon=True)
         plt.grid(True, linestyle='--', alpha=0.5)
@@ -518,9 +522,11 @@ class TrajectoryEvaluator:
         plt.figure(figsize=(10, 6))
         plt.hist(min_dist_real_to_real, bins=bins, alpha=0.6, label=f'Real-to-Real (n={n_real})', color='gray')
         plt.hist(min_dist_gen_to_real, bins=bins, alpha=0.6, label=f'Synthetic-to-Real (n={n_gen})', color='orange')
-        plt.xlabel('Euclidean Distance to Nearest Real Trajectory (Standardized)')
-        plt.ylabel('Count')
-        plt.title('Memorization Check (1-NN Distance Distribution)')
+        plt.xlabel('Euclidean Distance to Nearest Real Trajectory (Standardized)', fontsize=16)
+        plt.ylabel('Count', fontsize=16)
+        plt.title('Memorization Check (1-NN Distance Distribution)', fontsize=18)
+        plt.xticks(fontsize=16)
+        plt.yticks(fontsize=16)
         plt.legend()
         plt.grid(True, linestyle='--', alpha=0.5)
         
@@ -571,16 +577,29 @@ def run_self_diagnostic(real_dataset_path, output_plots_dir):
     real_data = np.load(real_dataset_path).astype(np.float32)
     print(f"Loaded shape: {real_data.shape}") # Expect (N, 4, 200)
     
+    # Ensure proportional stratification of underlying patterns using K-Means
+    print("Performing K-Means clustering to enable stratified splitting...")
+    from sklearn.cluster import KMeans
+    from sklearn.model_selection import StratifiedShuffleSplit
+    
+    flat_data = real_data.reshape(real_data.shape[0], -1)
+    kmeans = KMeans(n_clusters=4, random_state=42, n_init=10)
+    cluster_labels = kmeans.fit_predict(flat_data)
+    
     # Subsample to speed up self-diagnostic on CPU
     if len(real_data) > 800:
-        print("Subsampling dataset to 800 samples for rapid diagnostic testing...")
-        idx = np.random.choice(len(real_data), 800, replace=False)
+        print("Stratifying and subsampling dataset to 800 samples for rapid testing...")
+        sss = StratifiedShuffleSplit(n_splits=1, train_size=800, random_state=42)
+        idx, _ = next(sss.split(real_data, cluster_labels))
         real_data = real_data[idx]
+        cluster_labels = cluster_labels[idx]
         
-    # 1. Create a "Perfect Baseline" (split original data in half)
-    half = len(real_data) // 2
-    real_subset_A = real_data[:half]
-    real_subset_B = real_data[half:2*half]
+    # 1. Create a "Perfect Baseline" using Stratified splitting in half
+    print("Partitioning perfectly stratified subsets...")
+    sss_half = StratifiedShuffleSplit(n_splits=1, test_size=0.5, random_state=42)
+    idx_A, idx_B = next(sss_half.split(real_data, cluster_labels))
+    real_subset_A = real_data[idx_A]
+    real_subset_B = real_data[idx_B]
     
     # 2. Create a "Degraded Baseline" by adding systematic noise and shuffling coordinates
     print("\n--> Synthesizing corrupted dataset for diagnostic sensitivity testing...")
@@ -700,13 +719,13 @@ def run_model_evaluation(real_path, gen_path, output_dir):
     mem_save = os.path.join(output_dir, "trajectory_memorization_check.png")
     evaluator.check_memorization(real_data, gen_data, sample_size=500, save_path=mem_save)
     
-    # # Domain physics checks
-    # print("\n--> Evaluating physical constraints on real vs model-generated data:")
-    # print("   [Real Reference Data Envelope Violations]")
-    # # Alt min is 0ft since we are landing, but let's check stall speed ~55m/s (or kn) and max vertical rate 25m/s
-    # evaluator.compute_physics_violations(real_data, gs_max=150.0, alt_min=0.0, max_roc=25.0)
-    # print("\n   [LDM-Generated Data Envelope Violations]")
-    # evaluator.compute_physics_violations(gen_data, gs_max=150.0, alt_min=0.0, max_roc=25.0)
+    # Domain physics checks
+    print("\n--> Evaluating physical constraints on real vs model-generated data:")
+    print("   [Real Reference Data Envelope Violations]")
+    # Alt min is 0ft since we are landing, but let's check stall speed ~55m/s (or kn) and max vertical rate 25m/s
+    evaluator.compute_physics_violations(real_data, gs_max=150.0, alt_min=0.0, max_roc=25.0)
+    print("\n   [DM-Generated Data Envelope Violations]")
+    evaluator.compute_physics_violations(gen_data, gs_max=150.0, alt_min=0.0, max_roc=25.0)
     
     print("\n" + "="*65)
     print(" EVALUATION COMPLETE! Comparison finished successfully.")
@@ -725,7 +744,7 @@ if __name__ == '__main__':
     
     if args.diagnostic:
         # Run self-diagnostic
-        default_dataset = os.path.join(project_root, "data", "processed", "LSZH_2019_R14_kinematic_200pts.npy")
+        default_dataset = os.path.join(project_root, "data", "processed", "LSZH_2019_R14_kinematic_200pts_spatial_5000m.npy")
         default_output_plots = os.path.join(project_root, "pi_ldm", "outputs", "diagnostic_results")
         run_self_diagnostic(default_dataset, default_output_plots)
     else:
